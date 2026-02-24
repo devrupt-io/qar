@@ -1,0 +1,38 @@
+services:
+  test-postgres:
+    image: postgres:15-alpine
+    container_name: qar-test-postgres
+    environment:
+      POSTGRES_USER: qar_test
+      POSTGRES_PASSWORD: qar_test_password
+      POSTGRES_DB: qar_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qar_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: qar-test-runner
+    environment:
+      DATABASE_URL: postgres://qar_test:qar_test_password@test-postgres:5432/qar_test
+      NODE_ENV: test
+      QBITTORRENT_URL: http://mock-qbittorrent:8888
+      OMDB_API_KEY: ${OMDB_API_KEY:-test_api_key}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_CHAT_MODEL: ${OPENROUTER_CHAT_MODEL:-qwen/qwen3-8b}
+    env_file:
+      - path: .test-env
+        required: false
+      - path: ../.env
+        required: false
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+    volumes:
+      - ./coverage:/app/coverage

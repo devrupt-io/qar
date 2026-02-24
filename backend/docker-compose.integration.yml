@@ -1,0 +1,59 @@
+# Integration test compose file - completely isolated from production
+# Uses separate container names, network, and ephemeral database
+
+services:
+  integration-postgres:
+    image: postgres:15-alpine
+    container_name: qar-integration-postgres
+    environment:
+      POSTGRES_USER: qar_integration
+      POSTGRES_PASSWORD: qar_integration_password
+      POSTGRES_DB: qar_integration
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qar_integration"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - integration-network
+
+  integration-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qar-integration-backend
+    environment:
+      DATABASE_URL: postgres://qar_integration:qar_integration_password@integration-postgres:5432/qar_integration
+      QBITTORRENT_URL: http://mock-qbittorrent:8888
+      JELLYFIN_URL: http://mock-jellyfin:8096
+      OMDB_API_KEY: ${OMDB_API_KEY:-test_api_key}
+      NODE_ENV: test
+    ports:
+      - "3011:3001"
+    depends_on:
+      integration-postgres:
+        condition: service_healthy
+    networks:
+      - integration-network
+
+  integration-frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_URL: http://integration-backend:3001
+    container_name: qar-integration-frontend
+    environment:
+      BACKEND_URL: http://integration-backend:3001
+    ports:
+      - "3010:3000"
+    depends_on:
+      - integration-backend
+    networks:
+      - integration-network
+
+networks:
+  integration-network:
+    name: qar-integration-network

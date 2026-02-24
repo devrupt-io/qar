@@ -1,0 +1,131 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: qar-postgres
+    environment:
+      POSTGRES_USER: qar
+      POSTGRES_PASSWORD: qar_password
+      POSTGRES_DB: qar
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qar-backend
+    environment:
+      DATABASE_URL: postgres://qar:qar_password@postgres:5432/qar
+      QBITTORRENT_URL: http://pia-qbittorrent:8888
+      JELLYFIN_URL: http://jellyfin:8096
+      OMDB_API_KEY: ${OMDB_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_CHAT_MODEL: ${OPENROUTER_CHAT_MODEL:-qwen/qwen3-8b}
+      NODE_ENV: production
+    volumes:
+      - /qar/content:/qar/content
+      - /qar/disks:/qar/disks
+      - ./config:/qar/config
+      - qbittorrent_downloads:/qar/downloads
+      # Docker socket for container management (restart VPN container via Docker API)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_URL: http://backend:3001
+    container_name: qar-frontend
+    environment:
+      BACKEND_URL: http://backend:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # QBittorrent with VPN
+  # This container handles torrenting through a VPN connection for privacy.
+  #
+  # Configuration files (all in ./config directory):
+  # - auth.conf: VPN credentials (username on line 1, password on line 2)
+  # - vpn.conf: VPN settings (PIA_REGION, PORT_FORWARDING)
+  # - vpn-startup.sh: Wrapper script that reads vpn.conf before starting VPN
+  # - post-vpn-connect.sh: Hook script for network routing and qBittorrent auth
+  #
+  # To configure VPN:
+  # 1. Go to Settings page and enter VPN credentials and region
+  # 2. Settings are written to config/auth.conf and config/vpn.conf
+  # 3. Click "Apply VPN Settings" to restart the container
+  #
+  # The startup wrapper (vpn-startup.sh) reads vpn.conf at container start,
+  # so a simple container restart picks up new settings - no recreate needed.
+  pia-qbittorrent:
+    image: j4ym0/pia-qbittorrent
+    container_name: pia-qbittorrent
+    cap_add:
+      - NET_ADMIN
+    # Use our startup wrapper as the entrypoint to read config files
+    entrypoint: ["/qar/config/vpn-startup.sh"]
+    environment:
+      # Allow connections from Docker network to the WebUI
+      - ALLOW_LOCAL_SUBNET_TRAFFIC=true
+      # Disable host header validation to allow access from Docker network
+      - HOSTHEADERVALIDATION=false
+      - CSRFPROTECTION=false
+    volumes:
+      - qbittorrent_config:/config
+      # Mount the entire config directory for VPN settings
+      - ./config:/qar/config:ro
+      # Mount post-vpn-connect.sh at the location expected by j4ym0/pia-qbittorrent
+      - ./config/post-vpn-connect.sh:/config/post-vpn-connect.sh:ro
+      # Share downloads volume - QBittorrent saves to /downloads by default
+      - qbittorrent_downloads:/downloads
+      # Mount disks for file movement after download
+      - /qar/disks:/qar/disks
+    ports:
+      - "8888:8888"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8888 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: qar-jellyfin
+    environment:
+      - JELLYFIN_PublishedServerUrl=http://localhost:8096
+    volumes:
+      - jellyfin_config:/config
+      - jellyfin_cache:/cache
+      # Content directory contains .strm files that point to media
+      - /qar/content:/media:ro
+      # All storage disks accessible for direct play
+      - /qar/disks:/storage:ro
+      - ./config/qar-login.html:/jellyfin/jellyfin-web/qar-login.html:ro
+    ports:
+      - "8096:8096"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  qbittorrent_config:
+  qbittorrent_downloads:
+  jellyfin_config:
+  jellyfin_cache:

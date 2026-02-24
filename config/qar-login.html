@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qar - Connecting to Jellyfin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+        }
+        .logo {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .message {
+            color: #94a3b8;
+            margin-bottom: 1.5rem;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #334155;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .error {
+            color: #f87171;
+            display: none;
+        }
+        .btn {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+            display: none;
+        }
+        .btn:hover {
+            background: #4f46e5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">⛵</div>
+        <h1 class="title">Qar Media</h1>
+        <p class="message" id="message">Signing you in...</p>
+        <div class="spinner" id="spinner"></div>
+        <p class="error" id="error"></p>
+        <button class="btn" id="retryBtn" onclick="window.location.reload()">Try Again</button>
+    </div>
+
+    <script>
+        (function() {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('token');
+            const userId = params.get('userId');
+            const serverId = params.get('serverId');
+            const serverName = params.get('serverName') || 'Qar Media Server';
+            
+            // Get the current origin (this should be Jellyfin's origin)
+            const jellyfinUrl = window.location.origin;
+            
+            function showError(msg) {
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = msg;
+                document.getElementById('retryBtn').style.display = 'inline-block';
+            }
+            
+            function setMessage(msg) {
+                document.getElementById('message').textContent = msg;
+            }
+            
+            if (token) {
+                setMessage('Setting up your session...');
+                
+                try {
+                    // Validate we have a server ID
+                    if (!serverId) {
+                        showError('Server ID not provided. Please try again.');
+                        return;
+                    }
+                    
+                    // Clear any existing credentials to prevent ServerMismatch
+                    localStorage.removeItem('jellyfin_credentials');
+                    localStorage.removeItem('_deviceId2');
+                    
+                    // Build Jellyfin credentials object matching what the web client expects
+                    const credentials = {
+                        Servers: [{
+                            ManualAddress: jellyfinUrl,
+                            LocalAddress: jellyfinUrl,
+                            Name: serverName,
+                            Id: serverId,
+                            AccessToken: token,
+                            UserId: userId || "",
+                            DateLastAccessed: Date.now()
+                        }]
+                    };
+                    
+                    // Store in localStorage - this is the key that Jellyfin web client uses
+                    localStorage.setItem('jellyfin_credentials', JSON.stringify(credentials));
+                    
+                    // Also set the selected server
+                    localStorage.setItem('_deviceId2', 'qar-web-client-' + Date.now());
+                    
+                    setMessage('Redirecting to your media library...');
+                    
+                    // Redirect to Jellyfin home after a brief delay
+                    setTimeout(function() {
+                        window.location.href = jellyfinUrl + '/web/index.html#!/home.html';
+                    }, 300);
+                } catch (e) {
+                    showError('Failed to set up session: ' + e.message);
+                }
+            } else {
+                // No token provided - redirect to Jellyfin login
+                setMessage('Redirecting to Jellyfin...');
+                setTimeout(function() {
+                    window.location.href = jellyfinUrl + '/web/index.html';
+                }, 300);
+            }
+        })();
+    </script>
+</body>
+</html>
