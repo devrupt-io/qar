@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Library, Download, Settings, Sailboat, Play, ExternalLink } from 'lucide-react';
+import { Home, Library, Download, Settings, Sailboat, Play } from 'lucide-react';
 import { api } from '@/lib/api';
 
 const navItems = [
@@ -62,14 +62,15 @@ export default function Navbar() {
 
             {/* Jellyfin Link */}
             {jellyfinUrl && (
-              <Link
+              <a
                 href={jellyfinUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors bg-purple-600 hover:bg-purple-700 text-white ml-2"
               >
                 <Play className="w-5 h-5" />
                 <span className="hidden sm:inline">Watch</span>
-                <ExternalLink className="w-4 h-4 hidden sm:inline" />
-              </Link>
+              </a>
             )}
           </div>
         </div>

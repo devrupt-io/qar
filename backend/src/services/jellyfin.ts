@@ -587,6 +587,111 @@ export class JellyfinService {
   }
 
   /**
+   * Trigger a full library scan in Jellyfin.
+   * This ensures newly downloaded files are picked up.
+   */
+  async scanLibrary(): Promise<boolean> {
+    if (!this.adminToken) {
+      const token = await this.getAccessToken();
+      if (!token) {
+        console.log('Cannot scan library: no authentication token');
+        return false;
+      }
+    }
+
+    const headers = {
+      'X-Emby-Authorization': this.getAuthorizationHeader(this.adminToken!),
+    };
+
+    try {
+      await this.client.post('/Library/Refresh', {}, { headers });
+      console.log('Jellyfin library scan triggered');
+      return true;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      console.error('Failed to trigger Jellyfin library scan:', message);
+      return false;
+    }
+  }
+
+  /**
+   * Delete a Jellyfin item by its ID.
+   */
+  async deleteItem(itemId: string): Promise<boolean> {
+    if (!this.adminToken) {
+      const token = await this.getAccessToken();
+      if (!token) return false;
+    }
+
+    const headers = {
+      'X-Emby-Authorization': this.getAuthorizationHeader(this.adminToken!),
+    };
+
+    try {
+      await this.client.delete(`/Items/${itemId}`, { headers });
+      console.log(`Deleted Jellyfin item: ${itemId}`);
+      return true;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      console.error('Failed to delete Jellyfin item:', message);
+      return false;
+    }
+  }
+
+  /**
+   * Delete a Jellyfin item found by searching for it via its .strm file path or name.
+   * Used when removing media from Qar to also remove from Jellyfin.
+   */
+  async deleteItemByPath(strmFilePath: string): Promise<boolean> {
+    const itemId = await this.findItemByPath(strmFilePath);
+    if (!itemId) {
+      console.log(`No Jellyfin item found for path: ${strmFilePath}`);
+      return false;
+    }
+    return this.deleteItem(itemId);
+  }
+
+  /**
+   * Delete a Jellyfin TV series by searching for it by name.
+   */
+  async deleteTvSeriesByName(seriesName: string): Promise<boolean> {
+    if (!this.adminToken) {
+      const token = await this.getAccessToken();
+      if (!token) return false;
+    }
+
+    const headers = {
+      'X-Emby-Authorization': this.getAuthorizationHeader(this.adminToken!),
+    };
+
+    try {
+      const response = await this.client.get('/Items', {
+        headers,
+        params: {
+          searchTerm: seriesName,
+          includeItemTypes: 'Series',
+          recursive: true,
+          limit: 5,
+        },
+      });
+
+      if (response.data?.Items?.length > 0) {
+        for (const item of response.data.Items) {
+          if (item.Name === seriesName) {
+            await this.deleteItem(item.Id);
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      console.error('Failed to find/delete Jellyfin TV series:', message);
+      return false;
+    }
+  }
+
+  /**
    * Mark a Jellyfin item as unwatched (not played).
    * This ensures the item appears as "new" in the library after download.
    * 
@@ -645,6 +750,102 @@ export class JellyfinService {
       return false;
     }
     return this.markItemUnwatched(itemId);
+  }
+
+  /**
+   * Get watch history for the admin user.
+   * Returns items that have been played, with play count and favorite status.
+   */
+  async getWatchHistory(): Promise<Array<{
+    name: string;
+    type: 'Movie' | 'Series' | 'Episode';
+    played: boolean;
+    playCount: number;
+    isFavorite: boolean;
+    lastPlayedDate?: string;
+  }>> {
+    if (!this.adminToken) {
+      const token = await this.getAccessToken();
+      if (!token) return [];
+    }
+    if (!this.adminUserId) {
+      const userIdSetting = await Setting.findOne({ where: { key: 'jellyfinUserId' } });
+      if (userIdSetting) this.adminUserId = userIdSetting.value;
+      if (!this.adminUserId) return [];
+    }
+
+    const headers = {
+      'X-Emby-Authorization': this.getAuthorizationHeader(this.adminToken!),
+    };
+
+    try {
+      const results: Array<{
+        name: string;
+        type: 'Movie' | 'Series' | 'Episode';
+        played: boolean;
+        playCount: number;
+        isFavorite: boolean;
+        lastPlayedDate?: string;
+      }> = [];
+
+      // Get played movies and series
+      for (const itemType of ['Movie', 'Series'] as const) {
+        const resp = await this.client.get(`/Users/${this.adminUserId}/Items`, {
+          headers,
+          params: {
+            IncludeItemTypes: itemType,
+            Recursive: true,
+            Fields: 'UserDataPlayCount,UserDataLastPlayedDate',
+            IsPlayed: true,
+            Limit: 200,
+          },
+        });
+
+        for (const item of resp.data.Items || []) {
+          results.push({
+            name: item.Name,
+            type: itemType,
+            played: item.UserData?.Played ?? false,
+            playCount: item.UserData?.PlayCount ?? 0,
+            isFavorite: item.UserData?.IsFavorite ?? false,
+            lastPlayedDate: item.UserData?.LastPlayedDate,
+          });
+        }
+      }
+
+      // Also get favorites that may not have been played
+      const favResp = await this.client.get(`/Users/${this.adminUserId}/Items`, {
+        headers,
+        params: {
+          IncludeItemTypes: 'Movie,Series',
+          Recursive: true,
+          IsFavorite: true,
+          Limit: 200,
+        },
+      });
+
+      for (const item of favResp.data.Items || []) {
+        const existing = results.find(r => r.name === item.Name && r.type === (item.Type === 'Movie' ? 'Movie' : 'Series'));
+        if (!existing) {
+          results.push({
+            name: item.Name,
+            type: item.Type === 'Movie' ? 'Movie' : 'Series',
+            played: item.UserData?.Played ?? false,
+            playCount: item.UserData?.PlayCount ?? 0,
+            isFavorite: item.UserData?.IsFavorite ?? true,
+            lastPlayedDate: item.UserData?.LastPlayedDate,
+          });
+        } else {
+          existing.isFavorite = true;
+        }
+      }
+
+      return results;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      console.error('Failed to get watch history from Jellyfin:', message);
+      return [];
+    }
   }
 
   /**

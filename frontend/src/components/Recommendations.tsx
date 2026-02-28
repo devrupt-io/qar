@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 /* eslint-disable @next/next/no-img-element */
-import { Sparkles, RefreshCw, Film, Tv, AlertCircle, Plus, Check, Loader2, X, RotateCcw } from 'lucide-react';
+import { Sparkles, RefreshCw, Film, Tv, AlertCircle, Plus, Check, Loader2, X } from 'lucide-react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 
 interface Recommendation {
@@ -41,8 +42,6 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
   const [addStatuses, setAddStatuses] = useState<Record<string, AddStatus>>({});
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
   const [posters, setPosters] = useState<Record<string, string>>({});
-  const [showDismissed, setShowDismissed] = useState(false);
-  const [dismissedKeys, setDismissedKeys] = useState<string[]>([]);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recKey = (rec: Recommendation) => `${rec.title}-${rec.year}`;
@@ -50,7 +49,6 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
   useEffect(() => {
     setPosters(getCachedPosters());
     loadRecommendations();
-    loadDismissed();
     return () => { if (pollRef.current) clearTimeout(pollRef.current); };
   }, []);
 
@@ -117,13 +115,6 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
     }
   };
 
-  const loadDismissed = async () => {
-    try {
-      const data = await api.getDismissedRecommendations();
-      setDismissedKeys(data.dismissed || []);
-    } catch {}
-  };
-
   const handleRefresh = () => {
     setGenStatus('generating');
     loadRecommendations(true);
@@ -169,24 +160,6 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
     try {
       await api.dismissRecommendation(rec.title, rec.year);
       setRecommendations(prev => prev.filter(r => recKey(r) !== recKey(rec)));
-    } catch {}
-  };
-
-  const handleRestore = async (key: string) => {
-    const parts = key.match(/^(.+)-(\d+)$/);
-    if (!parts) return;
-    try {
-      await api.restoreRecommendation(parts[1], parseInt(parts[2]));
-      setDismissedKeys(prev => prev.filter(k => k !== key));
-    } catch {}
-  };
-
-  const handleRestoreAll = async () => {
-    try {
-      await api.restoreAllRecommendations();
-      setDismissedKeys([]);
-      setShowDismissed(false);
-      loadRecommendations();
     } catch {}
   };
 
@@ -292,17 +265,12 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {dismissedKeys.length > 0 || showDismissed ? (
-            <button
-              onClick={() => {
-                if (!showDismissed) loadDismissed();
-                setShowDismissed(!showDismissed);
-              }}
-              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-            >
-              {showDismissed ? 'Hide dismissed' : 'Manage dismissed'}
-            </button>
-          ) : null}
+          <Link
+            href="/settings?section=ai&tab=dismissed"
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            Manage dismissed
+          </Link>
           <button
             onClick={handleRefresh}
             className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
@@ -312,38 +280,6 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
           </button>
         </div>
       </div>
-
-      {/* Dismissed management */}
-      {showDismissed && (
-        <div className="mb-4 p-3 bg-slate-700/30 rounded-lg">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-slate-400">Dismissed Recommendations</span>
-            {dismissedKeys.length > 0 && (
-              <button onClick={handleRestoreAll} className="text-xs text-primary-400 hover:text-primary-300">
-                Restore All
-              </button>
-            )}
-          </div>
-          {dismissedKeys.length === 0 ? (
-            <p className="text-xs text-slate-500">No dismissed recommendations</p>
-          ) : (
-            <div className="space-y-1">
-              {dismissedKeys.map(key => (
-                <div key={key} className="flex items-center justify-between text-sm py-1">
-                  <span className="text-slate-300">{key.replace(/-(\d+)$/, ' ($1)')}</span>
-                  <button
-                    onClick={() => handleRestore(key)}
-                    className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    Restore
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Recommendation cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">

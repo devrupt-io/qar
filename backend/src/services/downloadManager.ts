@@ -759,7 +759,7 @@ class DownloadManager {
       // This can happen when metadata is loaded but file priorities aren't set yet
       newStatus = 'pending';
       console.log(`[DownloadManager] Torrent ${torrent.hash} has no files selected, marking as pending`);
-    } else if (torrent.state === 'pausedDL' || torrent.state === 'pausedUP') {
+    } else if (torrent.state === 'pausedDL' || torrent.state === 'pausedUP' || torrent.state === 'stoppedDL' || torrent.state === 'stoppedUP') {
       newStatus = 'paused';
     } else if (torrent.state === 'error') {
       newStatus = 'failed';
@@ -882,6 +882,14 @@ class DownloadManager {
       status: 'completed',
     });
 
+    // Update .yml metadata with torrent information for future re-downloads
+    await mediaService.updateMediaMetadata(mediaItem, {
+      magnetUri: download.magnetUri,
+      torrentHash: download.torrentHash || undefined,
+      torrentName: download.torrentName || torrent.name || undefined,
+      downloadedAt: new Date().toISOString(),
+    });
+
     // Remove torrent from QBittorrent
     if (download.torrentHash) {
       const deleted = await qbittorrentService.deleteTorrent(download.torrentHash, true);
@@ -895,7 +903,10 @@ class DownloadManager {
     if (strmPath) {
       console.log(`Updated .strm file for direct play: ${strmPath}`);
       
-      // Refresh Jellyfin item and mark as unwatched so it appears as recently added
+      // Trigger a full library scan so Jellyfin picks up the new file
+      await jellyfinService.scanLibrary();
+      
+      // Also try per-item refresh for faster update
       const refreshed = await jellyfinService.refreshItemByPath(strmPath);
       if (refreshed) {
         console.log(`Triggered Jellyfin refresh for: ${mediaItem.title}`);
@@ -980,10 +991,23 @@ class DownloadManager {
 
     console.log(`Season pack processing complete: ${processedCount} files processed, ${failedCount} failed`);
 
+    // Trigger Jellyfin library scan after processing all episodes
+    if (processedCount > 0) {
+      await jellyfinService.scanLibrary();
+    }
+
     // Update download as completed
     await download.update({
       completedAt: new Date(),
       status: 'completed',
+    });
+
+    // Update .yml metadata with torrent information for the main media item
+    await mediaService.updateMediaMetadata(primaryMediaItem, {
+      magnetUri: download.magnetUri,
+      torrentHash: download.torrentHash || undefined,
+      torrentName: download.torrentName || torrent.name || undefined,
+      downloadedAt: new Date().toISOString(),
     });
 
     // Remove torrent from QBittorrent

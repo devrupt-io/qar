@@ -5,6 +5,7 @@ import SearchBox from '@/components/SearchBox';
 import ActiveDownloads from '@/components/ActiveDownloads';
 import RecentMedia from '@/components/RecentMedia';
 import { SystemStatus } from '@/components/SystemStatus';
+import Recommendations from '@/components/Recommendations';
 import { api } from '@/lib/api';
 
 interface Stats {
@@ -64,6 +65,9 @@ export default function Home() {
         <h2 className="text-2xl font-bold mb-4">Add Media</h2>
         <SearchBox />
       </section>
+
+      {/* AI Recommendations */}
+      <Recommendations onLibraryUpdate={loadStats} />
 
       {/* Active Downloads Summary */}
       {stats && (

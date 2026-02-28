@@ -268,6 +268,20 @@ export class OpenRouterService {
   }
 
   /**
+   * Get any cached recommendations regardless of library hash or expiry.
+   * Used as fallback to keep showing previous recommendations.
+   */
+  async getAnyCachedRecommendations(): Promise<Recommendation[] | null> {
+    try {
+      const cachedData = await Setting.findOne({ where: { key: CACHE_SETTING_KEY } });
+      if (!cachedData) return null;
+      return JSON.parse(cachedData.value);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Update the cached recommendations (e.g., after OMDB validation filters some out).
    */
   async updateCache(
@@ -288,7 +302,14 @@ export class OpenRouterService {
    */
   async getRecommendations(
     library: Array<{ title: string; year?: number; type: "movie" | "tv" }>,
-    forceRefresh: boolean = false
+    forceRefresh: boolean = false,
+    watchHistory: Array<{
+      name: string;
+      type: 'Movie' | 'Series' | 'Episode';
+      played: boolean;
+      playCount: number;
+      isFavorite: boolean;
+    }> = []
   ): Promise<Recommendation[]> {
     if (!this.client || !this.apiKey) {
       throw new Error("OpenRouter API key not configured");
@@ -306,9 +327,9 @@ export class OpenRouterService {
       if (cached) return cached;
     }
 
-    console.log(`[openrouter] Generating recommendations for ${library.length} library items`);
+    console.log(`[openrouter] Generating recommendations for ${library.length} library items (${watchHistory.length} watch records)`);
 
-    const userPrompt = buildRecommendationsUserPrompt(library);
+    const userPrompt = buildRecommendationsUserPrompt(library, watchHistory);
 
     const result = await withRetry(async () => {
       const response = await this.client!.post("/chat/completions", {

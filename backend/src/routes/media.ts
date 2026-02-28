@@ -5,11 +5,13 @@ import { qbittorrentService } from '../services/qbittorrent';
 import { torrentSearchService } from '../services/torrentSearch';
 import { omdbService } from '../services/omdb';
 import { downloadManager } from '../services/downloadManager';
+import { jellyfinService } from '../services/jellyfin';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
-// Get all TV shows (not episodes)
+// In-flight download locks to prevent duplicate downloads from concurrent requests
+const downloadLocks = new Set<string>();
 router.get('/tv/shows', async (req, res) => {
   try {
     const shows = await TVShow.findAll({
@@ -251,6 +253,10 @@ router.post('/movie', async (req, res) => {
       const hash = await qbittorrentService.addTorrent(magnetUri);
       if (hash) {
         await download.update({ torrentHash: hash, status: 'downloading' });
+        // Store torrent info in .yml metadata
+        const dnMatch = magnetUri.match(/[?&]dn=([^&]+)/);
+        const torrentName = dnMatch ? decodeURIComponent(dnMatch[1].replace(/\+/g, ' ')) : undefined;
+        mediaService.updateMediaMetadata(media, { magnetUri, torrentHash: hash, torrentName }).catch(() => {});
       }
     }
 
@@ -315,6 +321,9 @@ router.post('/tv', async (req, res) => {
       const hash = await qbittorrentService.addTorrent(magnetUri);
       if (hash) {
         await download.update({ torrentHash: hash, status: 'downloading' });
+        const dnMatch = magnetUri.match(/[?&]dn=([^&]+)/);
+        const torrentName = dnMatch ? decodeURIComponent(dnMatch[1].replace(/\+/g, ' ')) : undefined;
+        mediaService.updateMediaMetadata(media, { magnetUri, torrentHash: hash, torrentName }).catch(() => {});
       }
     }
 
@@ -488,6 +497,9 @@ router.delete('/tv/show/:title', async (req, res) => {
     // Also delete the TVShow entry if it exists
     await TVShow.destroy({ where: { title: title } });
 
+    // Remove from Jellyfin
+    jellyfinService.deleteTvSeriesByName(title).catch(() => {});
+
     res.json({ 
       success: true, 
       deletedEpisodes: result.deletedEpisodes,
@@ -535,6 +547,9 @@ router.post('/web', async (req, res) => {
       const hash = await qbittorrentService.addTorrent(magnetUri);
       if (hash) {
         await download.update({ torrentHash: hash, status: 'downloading' });
+        const dnMatch = magnetUri.match(/[?&]dn=([^&]+)/);
+        const torrentName = dnMatch ? decodeURIComponent(dnMatch[1].replace(/\+/g, ' ')) : undefined;
+        mediaService.updateMediaMetadata(media, { magnetUri, torrentHash: hash, torrentName }).catch(() => {});
       }
     }
 
@@ -575,8 +590,23 @@ router.post('/:id/search-torrents', async (req, res) => {
 
 // Start download for a media item
 router.post('/:id/download', async (req, res) => {
+  const { id } = req.params;
+  const lockKey = `download:${id}`;
+  
+  // Prevent concurrent duplicate requests for the same media item
+  if (downloadLocks.has(lockKey)) {
+    console.log(`[Download] Request for ${id} already in-flight, waiting...`);
+    // Wait briefly and return the existing download if one was created
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const existing = await Download.findOne({
+      where: { mediaItemId: id, status: ['pending', 'downloading', 'paused'] },
+    });
+    if (existing) return res.json(existing);
+    return res.status(409).json({ error: 'Download request already in progress' });
+  }
+  
+  downloadLocks.add(lockKey);
   try {
-    const { id } = req.params;
     const { magnetUri, detectedEpisodes, wantedEpisodes } = req.body;
     
     if (!magnetUri) {
@@ -684,6 +714,19 @@ router.post('/:id/download', async (req, res) => {
     if (hash) {
       await download.update({ torrentHash: hash, status: 'downloading' });
       
+      // Extract torrent name from magnet URI dn= parameter
+      const dnMatch = magnetUri.match(/[?&]dn=([^&]+)/);
+      const torrentName = dnMatch ? decodeURIComponent(dnMatch[1].replace(/\+/g, ' ')) : undefined;
+      
+      // Store torrent info in .yml metadata immediately so it persists even if download is paused/cancelled
+      mediaService.updateMediaMetadata(media, {
+        magnetUri,
+        torrentHash: hash,
+        torrentName,
+      }).catch(err => {
+        console.error(`[Download] Failed to update metadata for ${media.title}:`, err);
+      });
+      
       // If this is a TV show download with specific episodes wanted,
       // configure file priorities to only download what we need
       if (media.type === 'tv' && wantedEpisodes && Array.isArray(wantedEpisodes) && wantedEpisodes.length > 0) {
@@ -716,6 +759,8 @@ router.post('/:id/download', async (req, res) => {
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to start download' });
+  } finally {
+    downloadLocks.delete(lockKey);
   }
 });
 
@@ -774,6 +819,12 @@ router.delete('/:id', async (req, res) => {
       } catch (e: any) {
         console.warn('Failed to move downloaded file to trash:', e.message);
       }
+    }
+
+    // Remove from Jellyfin before deleting files
+    const strmPath = mediaService.getStrmPath(media);
+    if (strmPath) {
+      jellyfinService.deleteItemByPath(strmPath).catch(() => {});
     }
 
     // Delete .strm and .yml content files

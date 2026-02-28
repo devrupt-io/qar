@@ -272,7 +272,8 @@ export class QBittorrentService {
     }
 
     try {
-      await this.client.post('/api/v2/torrents/pause', `hashes=${hash}`, {
+      // QBittorrent v5 renamed 'pause' to 'stop'
+      await this.client.post('/api/v2/torrents/stop', `hashes=${hash}`, {
         headers: this.getHeaders(),
       });
       return true;
@@ -288,7 +289,8 @@ export class QBittorrentService {
     }
 
     try {
-      await this.client.post('/api/v2/torrents/resume', `hashes=${hash}`, {
+      // QBittorrent v5 renamed 'resume' to 'start'
+      await this.client.post('/api/v2/torrents/start', `hashes=${hash}`, {
         headers: this.getHeaders(),
       });
       return true;
@@ -377,7 +379,7 @@ export class QBittorrentService {
         
         if (torrent.progress >= 1) {
           status = 'completed';
-        } else if (torrent.state === 'pausedDL' || torrent.state === 'pausedUP') {
+        } else if (torrent.state === 'pausedDL' || torrent.state === 'pausedUP' || torrent.state === 'stoppedDL' || torrent.state === 'stoppedUP') {
           status = 'paused';
         } else if (torrent.state === 'error') {
           status = 'failed';
@@ -488,7 +490,8 @@ export class QBittorrentService {
       console.log(`[QBittorrent] Enabled first/last piece priority for ${hash}`);
       return true;
     } catch (error) {
-      console.error('Set first/last piece priority error:', error);
+      // This endpoint may not exist in QBittorrent v5+, log and continue
+      console.warn('Set first/last piece priority not supported:', (error as any)?.message || error);
       return false;
     }
   }

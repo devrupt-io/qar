@@ -486,9 +486,11 @@ function MediaDetailsContent({ id }: { id: string }) {
 
             {/* Primary CTA */}
             <div className="flex flex-wrap gap-3 mb-6">
-              {(media.hasFile || jellyfinUrl) ? (
+              {media.hasFile ? (
                 <a
                   href={getJellyfinUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-colors"
                 >
                   <Play className="w-5 h-5" />
@@ -503,6 +505,15 @@ function MediaDetailsContent({ id }: { id: string }) {
                   Download
                 </button>
               ) : null}
+              {media.downloads?.[0] && ['downloading', 'pending', 'paused'].includes(media.downloads[0].status) && (
+                <Link
+                  href="/downloads"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition-colors"
+                >
+                  <Download className="w-5 h-5" />
+                  View in Downloads
+                </Link>
+              )}
             </div>
 
             {/* Secondary Actions */}

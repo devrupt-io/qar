@@ -32,9 +32,12 @@ export interface MediaMetadata {
   year?: number;
   imdbId?: string;
   magnetUri?: string;
+  torrentHash?: string;
+  torrentName?: string;
   season?: number;
   episode?: number;
   addedAt: string;
+  downloadedAt?: string;
 }
 
 // Helper function to create a URL-safe slug from a title
@@ -251,7 +254,90 @@ export class MediaService {
     await writeFile(ymlPath, YAML.stringify(metadata));
   }
 
+  // Update .yml metadata file with torrent/download information
+  async updateMediaMetadata(media: MediaItem, updates: Partial<MediaMetadata>): Promise<void> {
+    let contentPath: string;
+    let fileName: string;
+    
+    switch (media.type) {
+      case 'movie':
+        contentPath = path.join(config.paths.content, 'movies', `${media.title} (${media.year})`);
+        fileName = `${media.title} (${media.year})`;
+        break;
+      case 'tv':
+        contentPath = path.join(
+          config.paths.content, 
+          'tv', 
+          media.title,
+          `Season ${media.season || 1}`
+        );
+        fileName = `${media.title} S${String(media.season || 1).padStart(2, '0')}E${String(media.episode || 1).padStart(2, '0')}`;
+        break;
+      case 'web':
+        contentPath = path.join(config.paths.content, 'web', media.channel || 'Unknown');
+        fileName = media.title;
+        break;
+      default:
+        return;
+    }
+    
+    const ymlPath = path.join(contentPath, `${fileName}.yml`);
+    
+    try {
+      // Read existing metadata
+      let metadata: MediaMetadata;
+      try {
+        const existing = await readFile(ymlPath, 'utf-8');
+        metadata = YAML.parse(existing) || {};
+      } catch {
+        // File doesn't exist yet, create base metadata
+        metadata = {
+          title: media.title,
+          year: media.year,
+          imdbId: media.imdbId,
+          season: media.season,
+          episode: media.episode,
+          addedAt: new Date().toISOString(),
+        };
+      }
+      
+      // Merge updates
+      Object.assign(metadata, updates);
+      
+      await mkdir(contentPath, { recursive: true });
+      await writeFile(ymlPath, YAML.stringify(metadata));
+      console.log(`Updated metadata for ${media.title}: ${Object.keys(updates).join(', ')}`);
+    } catch (err: any) {
+      console.error(`Failed to update metadata for ${media.title}:`, err.message);
+    }
+  }
+
   // Delete .strm and .yml files for a media item
+  // Get the expected .strm file path for a media item
+  getStrmPath(media: MediaItem): string | null {
+    let contentPath: string;
+    let fileName: string;
+    
+    switch (media.type) {
+      case 'movie':
+        contentPath = path.join(config.paths.content, 'movies', `${media.title} (${media.year})`);
+        fileName = `${media.title} (${media.year})`;
+        break;
+      case 'tv':
+        contentPath = path.join(config.paths.content, 'tv', media.title, `Season ${media.season || 1}`);
+        fileName = `${media.title} S${String(media.season || 1).padStart(2, '0')}E${String(media.episode || 1).padStart(2, '0')}`;
+        break;
+      case 'web':
+        contentPath = path.join(config.paths.content, 'web', media.channel || 'Unknown');
+        fileName = media.title;
+        break;
+      default:
+        return null;
+    }
+    
+    return path.join(contentPath, `${fileName}.strm`);
+  }
+
   // For movies, also removes the movie directory
   // For TV shows, removes the episode files and cleans up empty directories
   async deleteMediaFiles(media: MediaItem): Promise<void> {

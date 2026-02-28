@@ -412,7 +412,9 @@ function TVShowDetailsContent({ id }: { id: string }) {
           <div className="flex flex-wrap gap-3">
             {downloadedEpisodes > 0 && (
               <a 
-                href="/jellyfin-redirect" 
+                href="/jellyfin-redirect"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="btn-primary flex items-center gap-2"
               >
                 <Play className="w-5 h-5" />
@@ -549,6 +551,8 @@ function TVShowDetailsContent({ id }: { id: string }) {
                             {isAvailable ? (
                               <a
                                 href="/jellyfin-redirect"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="btn-primary text-sm py-1 px-3 flex items-center gap-1"
                               >
                                 <Play className="w-4 h-4" />

@@ -3,6 +3,7 @@ import { MediaItem, TVShow, Setting } from "../models";
 import { openRouterService } from "../services/ai";
 import { Recommendation } from "../services/ai/schemas";
 import { omdbService } from "../services/omdb";
+import { jellyfinService } from "../services/jellyfin";
 
 const router = Router();
 
@@ -103,7 +104,21 @@ async function generateInBackground(library: Array<{ title: string; year?: numbe
   generationError = null;
 
   try {
-    let recommendations = await openRouterService.getRecommendations(library, true);
+    // Fetch watch history from Jellyfin for better recommendations
+    let watchHistory: Array<{
+      name: string;
+      type: 'Movie' | 'Series' | 'Episode';
+      played: boolean;
+      playCount: number;
+      isFavorite: boolean;
+    }> = [];
+    try {
+      watchHistory = await jellyfinService.getWatchHistory();
+    } catch (e) {
+      console.log('[recommendations] Could not fetch Jellyfin watch history, proceeding without it');
+    }
+
+    let recommendations = await openRouterService.getRecommendations(library, true, watchHistory);
 
     // Validate against OMDB
     if (recommendations.length > 0) {
@@ -162,7 +177,23 @@ router.get("/", async (req, res) => {
     // Try to get cached recommendations
     const hasCached = await openRouterService.hasCachedRecommendations(library);
     if (!hasCached) {
-      // No cache — return empty with "ready" status; user must click refresh to generate
+      // Cache miss (library changed or expired) - try to return stale data as fallback
+      const stale = await openRouterService.getAnyCachedRecommendations();
+      if (stale && stale.length > 0) {
+        // Filter out dismissed and library items from stale cache
+        const dismissed = await getDismissed();
+        const libraryTitles = new Set(library.map((item) => item.title.toLowerCase()));
+        const filtered = stale.filter((rec) => {
+          const key = `${rec.title}-${rec.year}`;
+          if (dismissed.has(key)) return false;
+          if (libraryTitles.has(rec.title.toLowerCase())) return false;
+          return true;
+        });
+        if (filtered.length > 0) {
+          return res.json({ recommendations: filtered, status: "ready", stale: true, librarySize: library.length });
+        }
+      }
+      // No cache at all — return empty with "ready" status; user must click refresh to generate
       return res.json({ recommendations: [], status: "ready" });
     }
 
