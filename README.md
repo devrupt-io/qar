@@ -76,16 +76,16 @@ to 100 items per hour by default. This can be configured via the API.
 **YAML Metadata**: The `.yml` files store extended metadata that aids recovery:
 
 ```yaml
-title: The Matrix
-year: 1999
-imdbId: tt0133093
+title: Night of the Living Dead
+year: 1968
+imdbId: tt0063350
 magnetUri: null
 season: null
 episode: null
-addedAt: 2026-01-03T07:28:51.546Z
+addedAt: 2026-01-01T00:00:00.000Z
 posterUrl: https://example.com/poster.jpg
-plot: A computer hacker learns about the true nature of reality...
-scannedAt: 2026-01-05T10:00:00.000Z
+plot: A ragtag group of barricade themselves in an old farmhouse to remain safe from a horde of flesh-eating ghouls that are ravaging the Northeast of the United States.
+scannedAt: 2026-01-01T01:00:00.000Z
 recoveredFrom: content
 ```
 
