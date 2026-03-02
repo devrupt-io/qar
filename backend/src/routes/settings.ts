@@ -335,41 +335,70 @@ let cachedRegions: VpnRegion[] | null = null;
 let regionsCacheTime: number = 0;
 const REGIONS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
-// Get available VPN regions from PIA server list
+// Format region ID into display name (e.g., "us_silicon_valley" → "US Silicon Valley")
+function formatRegionName(id: string): string {
+  return id
+    .split('_')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+// Get available VPN regions by listing .ovpn files in the VPN container
 router.get('/vpn/regions', async (req, res) => {
   try {
     // Return cached regions if still valid
     if (cachedRegions && Date.now() - regionsCacheTime < REGIONS_CACHE_TTL) {
       return res.json(cachedRegions);
     }
-    
-    console.log('Fetching VPN regions from PIA server list...');
-    const response = await fetch('https://serverlist.piaservers.net/vpninfo/servers/v6');
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch regions: ${response.status}`);
+
+    // Try to list .ovpn files from the VPN container via Docker API
+    let ovpnFiles: string[] = [];
+    try {
+      ovpnFiles = await dockerService.listOvpnFiles();
+    } catch (e) {
+      console.log('Could not list .ovpn files from container, trying PIA API fallback');
     }
-    
-    // The response format is: JSON content followed by newline and base64 signature
-    // We need to extract just the JSON part
-    const text = await response.text();
-    const jsonEndIndex = text.lastIndexOf(']}');
-    if (jsonEndIndex === -1) {
-      throw new Error('Invalid response format: cannot find JSON end');
+
+    let regions: VpnRegion[];
+
+    if (ovpnFiles.length > 0) {
+      // Use actual .ovpn file names as region IDs
+      regions = ovpnFiles
+        .map(f => f.replace('.ovpn', ''))
+        .map(id => ({
+          id,
+          name: formatRegionName(id),
+          country: id.substring(0, 2).toUpperCase(),
+          portForward: true,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      // Fallback: try PIA API and map IDs to known .ovpn names
+      console.log('Fetching VPN regions from PIA server list...');
+      const response = await fetch('https://serverlist.piaservers.net/vpninfo/servers/v6');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch regions: ${response.status}`);
+      }
+      
+      const text = await response.text();
+      const jsonEndIndex = text.lastIndexOf(']}');
+      if (jsonEndIndex === -1) {
+        throw new Error('Invalid response format: cannot find JSON end');
+      }
+      const jsonText = text.substring(0, jsonEndIndex + 2);
+      const data = JSON.parse(jsonText) as { regions: Array<{ id: string; name: string; country: string; port_forward: boolean; offline: boolean }> };
+      
+      regions = data.regions
+        .filter((r) => !r.offline)
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          country: r.country,
+          portForward: r.port_forward === true,
+        }))
+        .sort((a: VpnRegion, b: VpnRegion) => a.name.localeCompare(b.name));
     }
-    const jsonText = text.substring(0, jsonEndIndex + 2);
-    const data = JSON.parse(jsonText) as { regions: Array<{ id: string; name: string; country: string; port_forward: boolean; offline: boolean }> };
-    
-    // Extract regions and sort by name
-    const regions: VpnRegion[] = data.regions
-      .filter((r) => !r.offline)
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        country: r.country,
-        portForward: r.port_forward === true,
-      }))
-      .sort((a: VpnRegion, b: VpnRegion) => a.name.localeCompare(b.name));
     
     // Cache the results
     cachedRegions = regions;
@@ -384,19 +413,19 @@ router.get('/vpn/regions', async (req, res) => {
       return res.json(cachedRegions);
     }
     
-    // Return a fallback list if we can't fetch regions
+    // Return a fallback list of known working .ovpn file-based regions
     res.json([
-      { id: 'nl_amsterdam', name: 'Netherlands', country: 'NL', portForward: true },
-      { id: 'swiss', name: 'Switzerland', country: 'CH', portForward: true },
-      { id: 'sweden', name: 'SE Stockholm', country: 'SE', portForward: true },
-      { id: 'de-frankfurt', name: 'DE Frankfurt', country: 'DE', portForward: true },
-      { id: 'de-berlin', name: 'DE Berlin', country: 'DE', portForward: true },
+      { id: 'netherlands', name: 'Netherlands', country: 'NL', portForward: true },
+      { id: 'switzerland', name: 'Switzerland', country: 'CH', portForward: true },
+      { id: 'sweden', name: 'Sweden', country: 'SE', portForward: true },
+      { id: 'de_frankfurt', name: 'De Frankfurt', country: 'DE', portForward: true },
+      { id: 'de_berlin', name: 'De Berlin', country: 'DE', portForward: true },
       { id: 'france', name: 'France', country: 'FR', portForward: true },
-      { id: 'uk', name: 'UK London', country: 'GB', portForward: true },
-      { id: 'us-newjersey', name: 'US East', country: 'US', portForward: false },
-      { id: 'us3', name: 'US West', country: 'US', portForward: false },
-      { id: 'ca', name: 'CA Montreal', country: 'CA', portForward: true },
-      { id: 'japan', name: 'JP Tokyo', country: 'JP', portForward: true },
+      { id: 'uk_london', name: 'Uk London', country: 'UK', portForward: true },
+      { id: 'us_east', name: 'Us East', country: 'US', portForward: true },
+      { id: 'us_west', name: 'Us West', country: 'US', portForward: true },
+      { id: 'ca_montreal', name: 'Ca Montreal', country: 'CA', portForward: true },
+      { id: 'japan', name: 'Japan', country: 'JP', portForward: true },
     ]);
   }
 });

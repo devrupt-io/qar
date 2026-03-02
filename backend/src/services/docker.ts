@@ -291,6 +291,49 @@ export async function isDockerAvailable(): Promise<boolean> {
   }
 }
 
+/**
+ * List available .ovpn files from the VPN container.
+ * Uses Docker exec API to run `ls /openvpn/nextgen/` inside the container.
+ */
+export async function listOvpnFiles(): Promise<string[]> {
+  const container = await getContainerByName(CONTAINER_NAME);
+  if (!container) {
+    throw new Error('VPN container not found');
+  }
+
+  // Create exec instance
+  const execCreate = await dockerRequest('POST', `/containers/${container.Id}/exec`, {
+    AttachStdout: true,
+    AttachStderr: true,
+    Cmd: ['ls', '/openvpn/nextgen/'],
+  });
+
+  // Start exec and read output
+  const output: string = await new Promise((resolve, reject) => {
+    const options: http.RequestOptions = {
+      socketPath: DOCKER_SOCKET,
+      path: `/exec/${execCreate.Id}/start`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    };
+
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk.toString(); });
+      res.on('end', () => resolve(data));
+    });
+    req.on('error', reject);
+    req.write(JSON.stringify({ Detach: false, Tty: false }));
+    req.end();
+  });
+
+  // Parse filenames, filter to .ovpn files only
+  return output
+    .split(/[\n\r]+/)
+    .map(f => f.replace(/[^\x20-\x7E]/g, '').trim())
+    .filter(f => f.endsWith('.ovpn'));
+}
+
 export const dockerService = {
   listContainers,
   getContainerByName,
@@ -304,4 +347,5 @@ export const dockerService = {
   restartVpnContainer,
   getVpnContainerStatus,
   isDockerAvailable,
+  listOvpnFiles,
 };

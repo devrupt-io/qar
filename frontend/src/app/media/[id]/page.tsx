@@ -78,23 +78,46 @@ function MediaDetailsContent({ id }: { id: string }) {
   }>({ isOpen: false, title: '', message: '', confirmText: 'Confirm', onConfirm: async () => {} });
 
   useEffect(() => {
-    console.log('[MediaDetailsContent] useEffect triggered with id:', id);
     loadMediaDetails();
   }, [id]);
 
+  // Poll for download progress when there's an active download
+  useEffect(() => {
+    if (!media?.downloads?.length) return;
+    const activeDownload = media.downloads.find(d => 
+      ['downloading', 'pending', 'paused'].includes(d.status)
+    );
+    if (!activeDownload) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await api.getMediaDetails(id);
+        setMedia(data);
+        // If download just completed, also refresh Jellyfin URL
+        const stillActive = data.downloads?.find((d: any) => 
+          ['downloading', 'pending', 'paused'].includes(d.status)
+        );
+        if (!stillActive && data.hasFile) {
+          try {
+            const watchUrl = await api.getJellyfinWatchUrl(data.title, data.type, data.season, data.episode);
+            if (watchUrl.found) setJellyfinUrl(watchUrl.detailsUrl);
+          } catch {}
+        }
+      } catch {}
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [media?.downloads?.[0]?.status]);
+
   const loadMediaDetails = async () => {
-    console.log('[MediaDetailsContent] loadMediaDetails called for id:', id);
     try {
       setLoading(true);
       setError(null);
-      console.log('[MediaDetailsContent] Fetching from API...');
       const data = await api.getMediaDetails(id);
-      console.log('[MediaDetailsContent] API response:', data);
       
       // If this is a TV episode and we have a parent show, redirect to the TV show page
       // Individual episodes should not have their own page - users view them on the TV show page
       if (data.type === 'tv' && data.parentShowId && data.season && data.episode) {
-        console.log('[MediaDetailsContent] Redirecting TV episode to show page:', data.parentShowId);
         router.replace(`/media/tv/${data.parentShowId}`);
         return;
       }
@@ -116,11 +139,9 @@ function MediaDetailsContent({ id }: { id: string }) {
         console.warn('Could not get Jellyfin watch URL:', e);
       }
     } catch (err: any) {
-      console.error('[MediaDetailsContent] API error:', err);
       setError(err.message || 'Failed to load media details');
     } finally {
       setLoading(false);
-      console.log('[MediaDetailsContent] Loading complete');
     }
   };
 
