@@ -224,15 +224,15 @@ export default function DownloadsPage() {
               const episodesLabel = getDetectedEpisodesLabel(download.detectedEpisodes);
               return (
               <div key={download.id} className="card">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0 flex-1">
                     <Link 
                       href={`/media/${download.mediaItem.id}`}
                       className="font-semibold hover:text-primary-400 transition-colors"
                     >
                       {getMediaTitle(download.mediaItem, download.detectedEpisodes)}
                     </Link>
-                    <div className="flex items-center gap-2 text-sm text-slate-400">
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
                       <span className="capitalize flex items-center gap-1">
                         {getMediaIcon(download.mediaItem.type)}
                         {download.mediaItem.type}
@@ -249,12 +249,12 @@ export default function DownloadsPage() {
                       )}
                     </div>
                     {download.torrentName && (
-                      <div className="text-xs text-slate-500 mt-1 truncate max-w-lg" title={download.torrentName}>
+                      <div className="text-xs text-slate-500 mt-1 truncate" title={download.torrentName}>
                         📦 {download.torrentName}
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {download.status === 'downloading' && (
                       <button
                         className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors"

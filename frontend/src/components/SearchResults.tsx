@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
+/* eslint-disable @next/next/no-img-element */
 import { Plus, X, Film, Tv, Loader2, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 import TorrentSearch from './TorrentSearch';
@@ -25,6 +25,7 @@ export default function SearchResults({ results, loading, onClear }: Props) {
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [addResult, setAddResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [failedPosters, setFailedPosters] = useState<Set<string>>(new Set());
 
   const handleAdd = async (item: SearchResult, magnetUri?: string) => {
     setAdding(true);
@@ -100,13 +101,12 @@ export default function SearchResults({ results, loading, onClear }: Props) {
           >
             {/* Poster */}
             <div className="relative aspect-[2/3] bg-slate-700">
-              {item.Poster && item.Poster !== 'N/A' ? (
-                <Image
+              {item.Poster && item.Poster !== 'N/A' && !failedPosters.has(item.imdbID) ? (
+                <img
                   src={item.Poster}
                   alt={item.Title}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={() => setFailedPosters(prev => new Set(prev).add(item.imdbID))}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full">
@@ -148,8 +148,8 @@ export default function SearchResults({ results, loading, onClear }: Props) {
 
       {/* Add Modal */}
       {selectedItem && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/80 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-800 rounded-xl max-w-2xl w-full my-4 sm:my-0 max-h-none sm:max-h-[90vh] sm:overflow-y-auto">
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>

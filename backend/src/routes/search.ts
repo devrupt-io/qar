@@ -63,7 +63,7 @@ router.get('/omdb', async (req, res) => {
     }
 
     const searchType = type === 'movie' || type === 'series' ? type : undefined;
-    const results = await omdbService.search(q, searchType);
+    const results = await omdbService.search(q.trim(), searchType);
     
     res.json({ results });
   } catch (error) {
@@ -154,20 +154,58 @@ router.get('/torrents', async (req, res) => {
     const searchCategory = category === 'Movies' || category === 'TV' ? category : undefined;
     let searchResponse = await torrentSearchService.search(searchQuery, searchCategory);
     
-    // If no results and we used a release group, retry without it
-    if (searchResponse.results.length === 0 && applyPreferences === 'true' && category === 'Movies') {
+    // Progressive fallback: if no results, try removing filters one by one
+    if (searchResponse.results.length === 0 && applyPreferences === 'true') {
       const prefs = await getSearchPreferences();
       const usedGroup = overrideGroup !== undefined 
         ? (overrideGroup === 'none' || overrideGroup === 'any' ? '' : overrideGroup as string) 
         : (prefs.preferredMovieGroups.length > 0 ? prefs.preferredMovieGroups[0] : '');
-      
-      if (usedGroup && searchQuery.includes(usedGroup)) {
-        const queryWithoutGroup = searchQuery.replace(new RegExp(`\\s+${usedGroup}`, 'i'), '').trim();
-        console.log(`[API] No results with release group, retrying without: "${queryWithoutGroup}"`);
-        searchResponse = await torrentSearchService.search(queryWithoutGroup, searchCategory);
-        if (searchResponse.results.length > 0) {
+      const usedCodec = overrideCodec !== undefined
+        ? (overrideCodec === 'none' || overrideCodec === 'any' ? '' : overrideCodec as string)
+        : (prefs.preferredCodecs.length > 0 ? prefs.preferredCodecs[0] : '');
+      const usedResolution = overrideResolution !== undefined
+        ? (overrideResolution === 'none' || overrideResolution === 'any' ? '' : overrideResolution as string)
+        : (prefs.preferredResolutions.length > 0 ? prefs.preferredResolutions[0] : '');
+
+      const removedFilters: string[] = [];
+      let fallbackQuery = searchQuery;
+
+      // Step 1: Remove release group
+      if (usedGroup && fallbackQuery.includes(usedGroup)) {
+        fallbackQuery = fallbackQuery.replace(new RegExp(`\\s+${usedGroup}`, 'i'), '').trim();
+        removedFilters.push(`group "${usedGroup}"`);
+        console.log(`[API] Fallback: removed group, trying: "${fallbackQuery}"`);
+        searchResponse = await torrentSearchService.search(fallbackQuery, searchCategory);
+      }
+
+      // Step 2: Remove codec
+      if (searchResponse.results.length === 0 && usedCodec && fallbackQuery.toLowerCase().includes(usedCodec.toLowerCase())) {
+        fallbackQuery = fallbackQuery.replace(new RegExp(`\\s+${usedCodec}`, 'i'), '').trim();
+        removedFilters.push(`codec "${usedCodec}"`);
+        console.log(`[API] Fallback: removed codec, trying: "${fallbackQuery}"`);
+        searchResponse = await torrentSearchService.search(fallbackQuery, searchCategory);
+      }
+
+      // Step 3: Remove resolution
+      if (searchResponse.results.length === 0 && usedResolution && fallbackQuery.toLowerCase().includes(usedResolution.toLowerCase())) {
+        fallbackQuery = fallbackQuery.replace(new RegExp(`\\s+${usedResolution}`, 'i'), '').trim();
+        removedFilters.push(`resolution "${usedResolution}"`);
+        console.log(`[API] Fallback: removed resolution, trying: "${fallbackQuery}"`);
+        searchResponse = await torrentSearchService.search(fallbackQuery, searchCategory);
+      }
+
+      if (removedFilters.length > 0 && searchResponse.results.length > 0) {
+        // Only warn about filters that the results genuinely lack
+        const resultNames = searchResponse.results.map(r => r.name.toLowerCase());
+        const actuallyMissing = removedFilters.filter(f => {
+          const match = f.match(/"(.+)"/);
+          if (!match) return false;
+          const filterVal = match[1].toLowerCase();
+          return !resultNames.some(name => name.includes(filterVal));
+        });
+        if (actuallyMissing.length > 0) {
           searchResponse.warnings = searchResponse.warnings || [];
-          searchResponse.warnings.push(`No results for preferred group "${usedGroup}", showing results without group filter`);
+          searchResponse.warnings.push(`Broadened search (no exact matches for ${actuallyMissing.join(', ')}).`);
         }
       }
     }

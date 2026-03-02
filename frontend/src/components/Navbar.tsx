@@ -30,7 +30,7 @@ export default function Navbar() {
 
   return (
     <nav className="bg-slate-900 border-b border-slate-800">
-      <div className="container mx-auto px-4">
+      <div className="container">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
@@ -48,7 +48,7 @@ export default function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  className={`flex items-center gap-2 px-2 sm:px-4 py-2 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-primary-600 text-white'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -66,7 +66,7 @@ export default function Navbar() {
                 href={jellyfinUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors bg-purple-600 hover:bg-purple-700 text-white ml-2"
+                className="flex items-center gap-2 px-2 sm:px-4 py-2 rounded-lg transition-colors bg-purple-600 hover:bg-purple-700 text-white ml-2"
               >
                 <Play className="w-5 h-5" />
                 <span className="hidden sm:inline">Watch</span>

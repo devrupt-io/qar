@@ -95,6 +95,9 @@ export default function TorrentSearch({
   // Magnet fetching state
   const [fetchingMagnet, setFetchingMagnet] = useState<string | null>(null);
 
+  // Manual magnet/hash input
+  const [manualMagnet, setManualMagnet] = useState('');
+
   // Update search mode when defaultSearchMode changes
   useEffect(() => {
     if (defaultSearchMode) {
@@ -589,6 +592,42 @@ export default function TorrentSearch({
           Click search to find available torrents
         </p>
       )}
+
+      {/* Manual Magnet/Hash Input */}
+      <div className="mt-6 pt-4 border-t border-slate-700">
+        <p className="text-sm text-slate-400 mb-2">Or add a magnet link or torrent hash manually:</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            className="input flex-1 text-sm"
+            placeholder="magnet:?xt=urn:btih:... or info hash"
+            value={manualMagnet}
+            onChange={(e) => setManualMagnet(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && manualMagnet.trim()) {
+                const value = manualMagnet.trim();
+                const magnetUri = value.startsWith('magnet:') ? value : `magnet:?xt=urn:btih:${value}`;
+                onSelect(magnetUri);
+                setManualMagnet('');
+              }
+            }}
+          />
+          <button
+            className="btn-primary text-sm flex items-center gap-1.5 flex-shrink-0"
+            disabled={!manualMagnet.trim()}
+            onClick={() => {
+              const value = manualMagnet.trim();
+              if (!value) return;
+              const magnetUri = value.startsWith('magnet:') ? value : `magnet:?xt=urn:btih:${value}`;
+              onSelect(magnetUri);
+              setManualMagnet('');
+            }}
+          >
+            <Download className="w-4 h-4" />
+            Add
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

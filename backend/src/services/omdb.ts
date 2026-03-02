@@ -108,7 +108,9 @@ export class OmdbService {
         return [];
       }
 
-      return response.data.Search || [];
+      return (response.data.Search || []).filter(
+        (item: OmdbSearchResult) => item.Type === 'movie' || item.Type === 'series'
+      );
     } catch (error) {
       console.error('OMDB search error:', error);
       return [];
