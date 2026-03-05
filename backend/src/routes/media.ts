@@ -846,6 +846,40 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Delete only the stored media files for a media item, preserving all metadata
+router.post('/:id/delete-files', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const media = await MediaItem.findByPk(id);
+    if (!media) {
+      return res.status(404).json({ error: 'Media item not found' });
+    }
+
+    // Delete the downloaded file (moves to trash), clears filePath/diskPath
+    const result = await mediaService.deleteDownloadedFile(media);
+
+    // Remove associated download records and torrents from QBittorrent
+    const downloads = await Download.findAll({ where: { mediaItemId: id } });
+    for (const download of downloads) {
+      if (download.torrentHash) {
+        await qbittorrentService.deleteTorrent(download.torrentHash, true);
+      }
+    }
+    await Download.destroy({ where: { mediaItemId: id } });
+
+    res.json({
+      success: result.success,
+      message: result.message,
+      fileDeleted: true,
+      metadataPreserved: true,
+    });
+  } catch (error) {
+    console.error('Delete media files error:', error);
+    res.status(500).json({ error: 'Failed to delete media files' });
+  }
+});
+
 // Pin/unpin media item
 router.post('/:id/pin', async (req, res) => {
   try {

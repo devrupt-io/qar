@@ -26,7 +26,8 @@ import {
   Loader2,
   Copy,
   Check,
-  Link as LinkIcon
+  Link as LinkIcon,
+  FileX
 } from 'lucide-react';
 
 interface MediaDetails {
@@ -204,6 +205,33 @@ function MediaDetailsContent({ id }: { id: string }) {
           console.error('Failed to delete:', err);
           setIsDeleting(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  const handleDeleteFiles = async () => {
+    if (!media || !media.hasFile) return;
+
+    const titleStr = media.type === 'tv' && media.season && media.episode
+      ? `${media.title} S${String(media.season).padStart(2, '0')}E${String(media.episode).padStart(2, '0')}`
+      : media.title;
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Media Files',
+      message: `Delete the stored media files for "${titleStr}"?\n\nThe media item will remain in your library with all its metadata (magnet link, Jellyfin entry, etc.) so you can re-download it later.`,
+      confirmText: 'Delete Files',
+      onConfirm: async () => {
+        setIsDeleting(true);
+        try {
+          await api.deleteMediaFiles(media.id);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          loadMediaDetails();
+        } catch (err) {
+          console.error('Failed to delete files:', err);
+        } finally {
+          setIsDeleting(false);
         }
       },
     });
@@ -557,6 +585,22 @@ function MediaDetailsContent({ id }: { id: string }) {
                 )}
                 {media.pinned ? 'Unpin' : 'Pin for Offline'}
               </button>
+
+              {media.hasFile && (
+                <button
+                  onClick={handleDeleteFiles}
+                  disabled={isDeleting}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
+                  title="Delete stored media files but keep the library entry and metadata"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileX className="w-4 h-4" />
+                  )}
+                  Delete Files
+                </button>
+              )}
 
               <button
                 onClick={handleDelete}

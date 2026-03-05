@@ -60,11 +60,18 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get disk stats only
+// Get disk stats only (with media usage)
 router.get('/disks', async (req, res) => {
   try {
     const diskStats = await mediaService.getDiskStats();
-    res.json({ disks: diskStats });
+    
+    // Calculate media usage per disk
+    const disksWithMedia = await Promise.all(diskStats.map(async (disk) => {
+      const mediaBytes = await mediaService.getMediaUsage(disk.path);
+      return { ...disk, mediaBytes };
+    }));
+    
+    res.json({ disks: disksWithMedia });
   } catch (error) {
     console.error('Get disk stats error:', error);
     res.status(500).json({ error: 'Failed to get disk stats' });

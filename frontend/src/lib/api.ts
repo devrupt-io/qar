@@ -152,6 +152,13 @@ export const api = {
     });
   },
 
+  // Delete only the stored media files, preserving metadata
+  deleteMediaFiles: (id: string) => {
+    return fetchApi(`/media/${id}/delete-files`, {
+      method: 'POST',
+    });
+  },
+
   // Delete entire TV show (all episodes)
   deleteTvShow: (title: string, deleteFiles?: boolean) => {
     const params = deleteFiles ? '?deleteFiles=true' : '';

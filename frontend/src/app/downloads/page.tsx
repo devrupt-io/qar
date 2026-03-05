@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
-import { Download, Pause, Play, Trash2, AlertCircle, History, CheckCircle, Clock, Film, Tv, Globe } from 'lucide-react';
+import { Download, Pause, Play, Trash2, AlertCircle, History, CheckCircle, Clock, Film, Tv, Globe, ExternalLink } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
 interface DetectedEpisodes {
@@ -41,6 +41,7 @@ export default function DownloadsPage() {
   const [historyDownloads, setHistoryDownloads] = useState<DownloadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [qbitUrl, setQbitUrl] = useState('http://localhost:8888');
   
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -52,6 +53,7 @@ export default function DownloadsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
+    setQbitUrl(`${window.location.protocol}//${window.location.hostname}:8888`);
     loadDownloads();
     const interval = setInterval(loadDownloads, 5000);
     return () => clearInterval(interval);
@@ -208,6 +210,15 @@ export default function DownloadsPage() {
           <span className="px-2 py-1 bg-slate-700 rounded text-sm">
             {activeDownloads.length}
           </span>
+          <a
+            href={qbitUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto inline-flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors text-slate-300"
+          >
+            <ExternalLink className="w-4 h-4" />
+            QBittorrent
+          </a>
         </div>
 
         {activeDownloads.length === 0 ? (

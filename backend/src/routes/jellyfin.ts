@@ -16,14 +16,22 @@ router.get('/status', async (req, res) => {
   }
 });
 
+// Helper to derive the external Jellyfin base URL from the incoming request
+function getExternalJellyfinUrl(req: import('express').Request): string {
+  const host = req.hostname || 'localhost';
+  const protocol = req.protocol || 'http';
+  return `${protocol}://${host}:8096`;
+}
+
 // Fallback redirect endpoint - redirects to Jellyfin-hosted login page
 // The actual login page is mounted at /jellyfin/jellyfin-web/qar-login.html
 // and is served by Jellyfin at http://localhost:8096/web/qar-login.html
 router.get('/redirect', async (req, res) => {
   const { token, userId } = req.query;
+  const jellyfinBase = getExternalJellyfinUrl(req);
   
   // Redirect to the Jellyfin-hosted qar-login.html page
-  let redirectUrl = 'http://localhost:8096/web/qar-login.html';
+  let redirectUrl = `${jellyfinBase}/web/qar-login.html`;
   if (token) {
     redirectUrl += `?token=${encodeURIComponent(token as string)}`;
     if (userId) {
@@ -49,6 +57,7 @@ router.post('/setup', async (req, res) => {
 router.get('/token', async (req, res) => {
   try {
     const token = await jellyfinService.getAccessToken();
+    const jellyfinBase = getExternalJellyfinUrl(req);
     
     // Also get the userId and serverId
     const userIdSetting = await Setting.findOne({ where: { key: 'jellyfinUserId' } });
@@ -62,24 +71,24 @@ router.get('/token', async (req, res) => {
       // Build the redirect URL to the Jellyfin-hosted qar-login.html page
       // This page is mounted into Jellyfin's web directory and runs on Jellyfin's origin
       // so it can properly set localStorage credentials for automatic login
-      const redirectUrl = `http://localhost:8096/web/qar-login.html?token=${encodeURIComponent(token)}&userId=${encodeURIComponent(userId)}&serverId=${encodeURIComponent(serverId)}&serverName=${encodeURIComponent(serverName || 'Qar Media Server')}`;
+      const redirectUrl = `${jellyfinBase}/web/qar-login.html?token=${encodeURIComponent(token)}&userId=${encodeURIComponent(userId)}&serverId=${encodeURIComponent(serverId)}&serverName=${encodeURIComponent(serverName || 'Qar Media Server')}`;
       
       res.json({ 
         token, 
         userId,
         serverId,
         serverName,
-        jellyfinUrl: 'http://localhost:8096',
+        jellyfinUrl: jellyfinBase,
         redirectUrl
       });
     } else if (token) {
       // Have token but no server ID - fallback
-      const redirectUrl = `http://localhost:8096/web/qar-login.html?token=${encodeURIComponent(token)}&userId=${encodeURIComponent(userId)}`;
+      const redirectUrl = `${jellyfinBase}/web/qar-login.html?token=${encodeURIComponent(token)}&userId=${encodeURIComponent(userId)}`;
       
       res.json({ 
         token, 
         userId,
-        jellyfinUrl: 'http://localhost:8096',
+        jellyfinUrl: jellyfinBase,
         redirectUrl
       });
     } else {
@@ -120,14 +129,15 @@ router.get('/watch-url', async (req, res) => {
       title as string, 
       mediaType, 
       seasonNum, 
-      episodeNum
+      episodeNum,
+      getExternalJellyfinUrl(req)
     );
     
     if (!result) {
       // Item not found in Jellyfin - return fallback URL
       return res.json({
         found: false,
-        fallbackUrl: 'http://localhost:8096',
+        fallbackUrl: getExternalJellyfinUrl(req),
         message: 'Item not found in Jellyfin library. It may need a library refresh.',
       });
     }

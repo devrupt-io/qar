@@ -47,8 +47,9 @@ export default function JellyfinRedirectPage() {
           // This page will set localStorage and redirect to the Jellyfin home
           window.location.href = tokenData.redirectUrl;
         } catch (e) {
-          // No token available, just redirect to Jellyfin directly
-          window.location.href = 'http://localhost:8096';
+          // No token available, just redirect to Jellyfin directly using current hostname
+          const jellyfinUrl = `${window.location.protocol}//${window.location.hostname}:8096`;
+          window.location.href = jellyfinUrl;
         }
       } catch (error: any) {
         setStatus('error');

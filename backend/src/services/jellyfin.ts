@@ -895,7 +895,8 @@ export class JellyfinService {
     title: string, 
     type: 'movie' | 'tv' | 'web',
     season?: number,
-    episode?: number
+    episode?: number,
+    externalBaseUrl?: string
   ): Promise<{ itemId: string; detailsUrl: string; playUrl: string } | null> {
     if (!this.adminToken) {
       const token = await this.getAccessToken();
@@ -1033,9 +1034,9 @@ export class JellyfinService {
       const itemId = matchedItem.Id;
       const serverId = matchedItem.ServerId;
       
-      const externalBaseUrl = 'http://localhost:8096';
-      const detailsUrl = `${externalBaseUrl}/web/index.html#/details?id=${itemId}&serverId=${serverId}`;
-      const playUrl = `${externalBaseUrl}/web/index.html#/video?id=${itemId}&serverId=${serverId}`;
+      const baseUrl = externalBaseUrl || 'http://localhost:8096';
+      const detailsUrl = `${baseUrl}/web/index.html#/details?id=${itemId}&serverId=${serverId}`;
+      const playUrl = `${baseUrl}/web/index.html#/video?id=${itemId}&serverId=${serverId}`;
 
       return { itemId, detailsUrl, playUrl };
     } catch (error: unknown) {

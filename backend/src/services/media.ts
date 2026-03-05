@@ -168,6 +168,34 @@ export class MediaService {
     });
   }
 
+  // Calculate total size of media directories on a disk
+  async getMediaUsage(diskPath: string): Promise<number> {
+    const { exec } = require('child_process');
+    const mediaDirs = ['movies', 'tv', 'web'];
+    let totalBytes = 0;
+
+    for (const dir of mediaDirs) {
+      const dirPath = path.join(diskPath, dir);
+      try {
+        await access(dirPath, fs.constants.R_OK);
+        const bytes = await new Promise<number>((resolve) => {
+          exec(`du -sb "${dirPath}" 2>/dev/null | cut -f1`, (error: any, stdout: string) => {
+            if (error || !stdout.trim()) {
+              resolve(0);
+              return;
+            }
+            resolve(parseInt(stdout.trim(), 10) || 0);
+          });
+        });
+        totalBytes += bytes;
+      } catch {
+        // Directory doesn't exist, skip
+      }
+    }
+
+    return totalBytes;
+  }
+
   // Find the best disk for a new media item
   async findBestDisk(type: MediaType, title: string): Promise<string> {
     const disks = await this.getDiskStats();

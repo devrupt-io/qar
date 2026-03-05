@@ -40,6 +40,7 @@ interface DiskInfo {
   freeBytes: number;
   usedBytes: number;
   usedPercent: number;
+  mediaBytes?: number;
 }
 
 interface VpnRegion {
@@ -1156,6 +1157,12 @@ function SettingsPageContent() {
                         {formatBytes(disk.freeBytes)} free
                       </span>
                     </div>
+                    {disk.mediaBytes != null && disk.mediaBytes > 0 && (
+                      <div className="text-sm text-primary-400 mt-1">
+                        <Film className="w-3.5 h-3.5 inline mr-1" />
+                        {formatBytes(disk.mediaBytes)} used by media
+                      </div>
+                    )}
                     <div className="text-right text-sm font-medium mt-1">
                       {disk.usedPercent.toFixed(1)}% of {formatBytes(disk.totalBytes)}
                     </div>
