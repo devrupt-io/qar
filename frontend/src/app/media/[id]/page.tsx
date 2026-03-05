@@ -167,22 +167,18 @@ function MediaDetailsContent({ id }: { id: string }) {
   const handleDelete = async () => {
     if (!media) return;
     
-    // For TV episodes, we only delete the downloaded file, not the metadata
-    // To delete the entire show, users must use the TV show page
     const isTvEpisode = media.type === 'tv';
     const episodeStr = isTvEpisode 
       ? `S${String(media.season).padStart(2, '0')}E${String(media.episode).padStart(2, '0')}`
       : '';
     
-    const title = isTvEpisode 
-      ? 'Remove Downloaded File'
-      : 'Delete Media';
+    const title = 'Remove from Library';
     
     const message = isTvEpisode 
-      ? `Remove downloaded file for "${media.title}" ${episodeStr}?\n\nThe episode will remain in your library. To delete the entire show, go to the TV show page and use the Delete button there.`
-      : `Delete "${media.title}"?\n\nThis will also delete any downloaded files (moved to trash for recovery).`;
+      ? `Remove "${media.title}" ${episodeStr} from your library?\n\nThe episode and any downloaded files will be removed. To delete the entire show, go to the TV show page.`
+      : `Remove "${media.title}" from your library?\n\nThis will remove the item and any downloaded files (moved to trash for recovery).`;
     
-    const confirmText = isTvEpisode ? 'Remove File' : 'Delete';
+    const confirmText = 'Remove';
     
     setConfirmModal({
       isOpen: true,
@@ -194,9 +190,8 @@ function MediaDetailsContent({ id }: { id: string }) {
         try {
           await api.deleteMedia(media.id, true);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          // For TV episodes, stay on the page since we just deleted the file
           if (isTvEpisode) {
-            loadMediaDetails(); // Reload to show updated status
+            loadMediaDetails();
             setIsDeleting(false);
           } else {
             router.push('/library');
@@ -219,9 +214,9 @@ function MediaDetailsContent({ id }: { id: string }) {
 
     setConfirmModal({
       isOpen: true,
-      title: 'Delete Media Files',
-      message: `Delete the stored media files for "${titleStr}"?\n\nThe media item will remain in your library with all its metadata (magnet link, Jellyfin entry, etc.) so you can re-download it later.`,
-      confirmText: 'Delete Files',
+      title: 'Free Up Disk Space',
+      message: `Delete the downloaded files for "${titleStr}" to free up disk space?\n\nThe item stays in your library with all its metadata so you can re-download it anytime.`,
+      confirmText: 'Free Up Space',
       onConfirm: async () => {
         setIsDeleting(true);
         try {
@@ -591,14 +586,14 @@ function MediaDetailsContent({ id }: { id: string }) {
                   onClick={handleDeleteFiles}
                   disabled={isDeleting}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
-                  title="Delete stored media files but keep the library entry and metadata"
+                  title="Free up disk space by removing downloaded files — the item stays in your library"
                 >
                   {isDeleting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <FileX className="w-4 h-4" />
                   )}
-                  Delete Files
+                  Free Up Space
                 </button>
               )}
 
@@ -606,14 +601,14 @@ function MediaDetailsContent({ id }: { id: string }) {
                 onClick={handleDelete}
                 disabled={isDeleting}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-                title={media.type === 'tv' ? 'Remove downloaded file (episode metadata is preserved)' : 'Delete item and move files to trash'}
+                title="Remove this item from your library entirely"
               >
                 {isDeleting ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Trash2 className="w-4 h-4" />
                 )}
-                {media.type === 'tv' && media.hasFile ? 'Remove Download' : 'Delete'}
+                Remove from Library
               </button>
 
               {media.imdbId && (
