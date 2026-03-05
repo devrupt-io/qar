@@ -16,11 +16,12 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// Helper to derive the external Jellyfin base URL from the incoming request
-function getExternalJellyfinUrl(req: import('express').Request): string {
-  const host = req.hostname || 'localhost';
-  const protocol = req.protocol || 'http';
-  return `${protocol}://${host}:8096`;
+// Helper to get the Jellyfin base URL for external (client-facing) URLs.
+// Returns localhost:8096 — the frontend replaces the hostname when needed
+// since the backend cannot reliably determine the client's hostname
+// (requests are proxied through Next.js).
+function getExternalJellyfinUrl(): string {
+  return 'http://localhost:8096';
 }
 
 // Fallback redirect endpoint - redirects to Jellyfin-hosted login page
@@ -28,7 +29,7 @@ function getExternalJellyfinUrl(req: import('express').Request): string {
 // and is served by Jellyfin at http://localhost:8096/web/qar-login.html
 router.get('/redirect', async (req, res) => {
   const { token, userId } = req.query;
-  const jellyfinBase = getExternalJellyfinUrl(req);
+  const jellyfinBase = getExternalJellyfinUrl();
   
   // Redirect to the Jellyfin-hosted qar-login.html page
   let redirectUrl = `${jellyfinBase}/web/qar-login.html`;
@@ -57,7 +58,7 @@ router.post('/setup', async (req, res) => {
 router.get('/token', async (req, res) => {
   try {
     const token = await jellyfinService.getAccessToken();
-    const jellyfinBase = getExternalJellyfinUrl(req);
+    const jellyfinBase = getExternalJellyfinUrl();
     
     // Also get the userId and serverId
     const userIdSetting = await Setting.findOne({ where: { key: 'jellyfinUserId' } });
@@ -130,14 +131,14 @@ router.get('/watch-url', async (req, res) => {
       mediaType, 
       seasonNum, 
       episodeNum,
-      getExternalJellyfinUrl(req)
+      getExternalJellyfinUrl()
     );
     
     if (!result) {
       // Item not found in Jellyfin - return fallback URL
       return res.json({
         found: false,
-        fallbackUrl: getExternalJellyfinUrl(req),
+        fallbackUrl: getExternalJellyfinUrl(),
         message: 'Item not found in Jellyfin library. It may need a library refresh.',
       });
     }

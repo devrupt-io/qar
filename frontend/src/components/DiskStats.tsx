@@ -51,7 +51,10 @@ export default function DiskStats({ disks, loading }: Props) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {disks.map(disk => (
+      {disks.map(disk => {
+        const mediaPercent = disk.mediaBytes && disk.totalBytes ? (disk.mediaBytes / disk.totalBytes) * 100 : 0;
+        const otherPercent = disk.usedPercent - mediaPercent;
+        return (
         <div key={disk.name} className="bg-slate-700/50 rounded-lg p-4">
           <div className="flex items-center gap-3 mb-3">
             <HardDrive className="w-6 h-6 text-primary-400" />
@@ -61,34 +64,42 @@ export default function DiskStats({ disks, loading }: Props) {
             </div>
           </div>
 
-          {/* Progress Bar */}
+          {/* Stacked Progress Bar */}
           <div className="relative h-3 bg-slate-600 rounded-full overflow-hidden mb-2">
+            {mediaPercent > 0 && (
+              <div
+                className="absolute inset-y-0 left-0 bg-primary-500 transition-all"
+                style={{ width: `${mediaPercent}%` }}
+              />
+            )}
             <div
-              className={`absolute inset-y-0 left-0 rounded-full transition-all ${getUsageColor(disk.usedPercent)}`}
-              style={{ width: `${disk.usedPercent}%` }}
+              className={`absolute inset-y-0 transition-all ${otherPercent > 0 && disk.usedPercent >= 90 ? 'bg-red-500' : otherPercent > 0 && disk.usedPercent >= 75 ? 'bg-yellow-500' : 'bg-slate-500'}`}
+              style={{ left: `${mediaPercent}%`, width: `${Math.max(otherPercent, 0)}%` }}
             />
           </div>
 
           {/* Stats */}
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">
-              {formatBytes(disk.usedBytes)} used
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {disk.mediaBytes != null && disk.mediaBytes > 0 && (
+              <span className="flex items-center gap-1 text-primary-400">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-primary-500" />
+                {formatBytes(disk.mediaBytes)} media
+              </span>
+            )}
+            <span className="flex items-center gap-1 text-slate-400">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-slate-500" />
+              {formatBytes(disk.usedBytes - (disk.mediaBytes || 0))} other
             </span>
             <span className="text-slate-400">
               {formatBytes(disk.freeBytes)} free
             </span>
           </div>
-          {disk.mediaBytes != null && disk.mediaBytes > 0 && (
-            <div className="text-sm text-primary-400 mt-1">
-              <Film className="w-3.5 h-3.5 inline mr-1" />
-              {formatBytes(disk.mediaBytes)} used by media
-            </div>
-          )}
           <div className="text-right text-sm font-medium mt-1">
             {disk.usedPercent.toFixed(1)}% of {formatBytes(disk.totalBytes)}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

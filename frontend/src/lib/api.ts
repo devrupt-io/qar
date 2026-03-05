@@ -1,6 +1,15 @@
 // Always use relative /api path - Next.js rewrites handle routing to backend
 const API_BASE = '/api';
 
+// Rewrite localhost in URLs returned by the backend to use the browser's hostname.
+// This ensures Jellyfin and other service URLs work when accessed via LAN IP.
+function rewriteHost(url: string): string {
+  if (typeof window === 'undefined') return url;
+  const currentHost = window.location.hostname;
+  if (currentHost === 'localhost' || currentHost === '127.0.0.1') return url;
+  return url.replace(/\/\/localhost([:/])/g, `//${currentHost}$1`);
+}
+
 async function fetchApi(endpoint: string, options?: RequestInit) {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -318,8 +327,11 @@ export const api = {
     });
   },
 
-  getJellyfinToken: () => {
-    return fetchApi('/jellyfin/token');
+  getJellyfinToken: async () => {
+    const data = await fetchApi('/jellyfin/token');
+    if (data.redirectUrl) data.redirectUrl = rewriteHost(data.redirectUrl);
+    if (data.jellyfinUrl) data.jellyfinUrl = rewriteHost(data.jellyfinUrl);
+    return data;
   },
 
   refreshJellyfinLibraries: () => {
@@ -329,11 +341,15 @@ export const api = {
   },
 
   // Get Jellyfin watch URL for a specific media item
-  getJellyfinWatchUrl: (title: string, type: 'movie' | 'tv' | 'web', season?: number, episode?: number) => {
+  getJellyfinWatchUrl: async (title: string, type: 'movie' | 'tv' | 'web', season?: number, episode?: number) => {
     const params = new URLSearchParams({ title, type });
     if (season) params.append('season', String(season));
     if (episode) params.append('episode', String(episode));
-    return fetchApi(`/jellyfin/watch-url?${params}`);
+    const data = await fetchApi(`/jellyfin/watch-url?${params}`);
+    if (data.detailsUrl) data.detailsUrl = rewriteHost(data.detailsUrl);
+    if (data.playUrl) data.playUrl = rewriteHost(data.playUrl);
+    if (data.fallbackUrl) data.fallbackUrl = rewriteHost(data.fallbackUrl);
+    return data;
   },
 
   // AI Recommendations
