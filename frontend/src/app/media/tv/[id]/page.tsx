@@ -226,9 +226,17 @@ function TVShowDetailsContent({ id }: { id: string }) {
       // for all relevant episodes.
       
       // Get all episodes that need downloading based on mode
-      const episodesToDownload = downloadMode === 'complete' 
-        ? show.episodes.filter(ep => !ep.filePath && !ep.diskPath)
-        : show.episodes.filter(ep => ep.season === selectedSeasonForDownload && !ep.filePath && !ep.diskPath);
+      // Exclude episodes that already have files OR have active downloads
+      const episodesToDownload = (downloadMode === 'complete' 
+        ? show.episodes
+        : show.episodes.filter(ep => ep.season === selectedSeasonForDownload)
+      ).filter(ep => {
+        if (ep.filePath && ep.diskPath) return false;
+        const hasActiveDownload = ep.downloads?.some(
+          (d: any) => d.status === 'downloading' || d.status === 'pending' || d.status === 'paused'
+        );
+        return !hasActiveDownload;
+      });
       
       if (episodesToDownload.length === 0) {
         setNotification({ type: 'info', message: 'All episodes are already downloaded!' });
