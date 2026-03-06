@@ -58,8 +58,6 @@ router.get('/tv/shows/:id', async (req, res) => {
     });
     
     // Find active season/series pack downloads that cover multiple episodes.
-    // These are downloads linked to one episode but whose detectedEpisodes
-    // list includes other episodes from the same show.
     const activePackDownloads = await Download.findAll({
       where: {
         status: ['pending', 'downloading', 'paused'],
@@ -67,31 +65,57 @@ router.get('/tv/shows/:id', async (req, res) => {
       include: [{ model: MediaItem, as: 'mediaItem', where: { type: 'tv', title: show.title } }],
     });
     
-    // Build a map of episode key -> pack download for episodes covered by a pack
-    const packDownloadMap = new Map<string, Download>();
+    // Build per-episode progress map by fetching individual file progress from QBittorrent
+    const episodeProgressMap = new Map<string, { downloadId: string; status: string; progress: number }>();
     for (const dl of activePackDownloads) {
       const detected = dl.detectedEpisodes;
-      if (detected?.episodes && detected.episodes.length > 1) {
-        for (const ep of detected.episodes) {
-          const key = `${ep.season}:${ep.episode}`;
-          packDownloadMap.set(key, dl);
+      if (detected?.episodes && detected.episodes.length > 1 && dl.torrentHash) {
+        try {
+          const files = await qbittorrentService.getTorrentFiles(dl.torrentHash);
+          for (const file of files) {
+            const match = file.name.match(/[Ss](\d{1,2})[Ee](\d{1,2})/);
+            if (match) {
+              const key = `${parseInt(match[1])}:${parseInt(match[2])}`;
+              // Only include episodes that are in the wanted list
+              const isWanted = detected.episodes.some(
+                (ep: any) => ep.season === parseInt(match[1]) && ep.episode === parseInt(match[2])
+              );
+              if (isWanted && file.priority > 0) {
+                episodeProgressMap.set(key, {
+                  downloadId: dl.id,
+                  status: dl.status,
+                  progress: Math.round(file.progress * 100),
+                });
+              }
+            }
+          }
+        } catch (err) {
+          // QBittorrent unavailable - fall back to overall progress
+          for (const ep of detected.episodes) {
+            const key = `${ep.season}:${ep.episode}`;
+            episodeProgressMap.set(key, {
+              downloadId: dl.id,
+              status: dl.status,
+              progress: dl.progress || 0,
+            });
+          }
         }
       }
     }
     
-    // Augment episodes: if an episode has no download but is covered by a pack download,
-    // inject a synthetic download entry so the frontend shows it as downloading
+    // Augment episodes: inject per-file progress from pack downloads
     const augmentedEpisodes = episodes.map(ep => {
       const epData = ep.toJSON() as any;
-      const hasOwnDownload = epData.downloads && epData.downloads.length > 0;
-      if (!hasOwnDownload && ep.season && ep.episode) {
+      if (ep.season && ep.episode) {
         const key = `${ep.season}:${ep.episode}`;
-        const packDl = packDownloadMap.get(key);
-        if (packDl) {
+        const info = episodeProgressMap.get(key);
+        if (info) {
+          // Override with per-file progress (even if episode has its own download record,
+          // the pack's per-file progress is more accurate than overall torrent progress)
           epData.downloads = [{
-            id: packDl.id,
-            status: packDl.status,
-            progress: packDl.progress,
+            id: info.downloadId,
+            status: info.status,
+            progress: info.progress,
           }];
         }
       }

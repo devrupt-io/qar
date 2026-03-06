@@ -248,6 +248,17 @@ class DownloadManager {
             console.log(`[DownloadManager] Fallback: Selected all ${allFileIds.length} media files for download`);
           }
         }
+      } else if (selectedFiles.length > 1) {
+        // Files are already selected - ensure sequential priorities are applied.
+        // If all selected files have the same priority, re-apply sequential ordering.
+        const detectedEpisodes = download.detectedEpisodes;
+        if (detectedEpisodes?.episodes && detectedEpisodes.episodes.length > 1) {
+          const priorities = new Set(selectedFiles.map(f => f.priority));
+          if (priorities.size === 1) {
+            console.log(`[DownloadManager] Re-applying sequential priorities for ${mediaItem.title}`);
+            await this.configureFilePriorities(torrent.hash, detectedEpisodes.episodes);
+          }
+        }
       }
     } catch (error) {
       console.error('[DownloadManager] Error ensuring file priorities:', error);
