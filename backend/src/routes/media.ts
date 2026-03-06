@@ -57,9 +57,50 @@ router.get('/tv/shows/:id', async (req, res) => {
       include: [{ model: Download, as: 'downloads' }],
     });
     
+    // Find active season/series pack downloads that cover multiple episodes.
+    // These are downloads linked to one episode but whose detectedEpisodes
+    // list includes other episodes from the same show.
+    const activePackDownloads = await Download.findAll({
+      where: {
+        status: ['pending', 'downloading', 'paused'],
+      },
+      include: [{ model: MediaItem, as: 'mediaItem', where: { type: 'tv', title: show.title } }],
+    });
+    
+    // Build a map of episode key -> pack download for episodes covered by a pack
+    const packDownloadMap = new Map<string, Download>();
+    for (const dl of activePackDownloads) {
+      const detected = dl.detectedEpisodes;
+      if (detected?.episodes && detected.episodes.length > 1) {
+        for (const ep of detected.episodes) {
+          const key = `${ep.season}:${ep.episode}`;
+          packDownloadMap.set(key, dl);
+        }
+      }
+    }
+    
+    // Augment episodes: if an episode has no download but is covered by a pack download,
+    // inject a synthetic download entry so the frontend shows it as downloading
+    const augmentedEpisodes = episodes.map(ep => {
+      const epData = ep.toJSON() as any;
+      const hasOwnDownload = epData.downloads && epData.downloads.length > 0;
+      if (!hasOwnDownload && ep.season && ep.episode) {
+        const key = `${ep.season}:${ep.episode}`;
+        const packDl = packDownloadMap.get(key);
+        if (packDl) {
+          epData.downloads = [{
+            id: packDl.id,
+            status: packDl.status,
+            progress: packDl.progress,
+          }];
+        }
+      }
+      return epData;
+    });
+    
     res.json({
       ...show.toJSON(),
-      episodes,
+      episodes: augmentedEpisodes,
     });
   } catch (error) {
     console.error('Get TV show error:', error);
@@ -86,6 +127,25 @@ router.get('/', async (req, res) => {
           include: [{ model: Download, as: 'downloads' }],
         });
         
+        // Find active pack downloads for this show
+        const activePackDownloads = await Download.findAll({
+          where: { status: ['pending', 'downloading', 'paused'] },
+          include: [{ model: MediaItem, as: 'mediaItem', where: { type: 'tv', title: show.title } }],
+        });
+        
+        // Build set of episodes covered by pack downloads
+        const packEpisodeKeys = new Set<string>();
+        let hasActivePackDownload = false;
+        for (const dl of activePackDownloads) {
+          const detected = dl.detectedEpisodes;
+          if (detected?.episodes && detected.episodes.length > 1) {
+            hasActivePackDownload = true;
+            for (const ep of detected.episodes) {
+              packEpisodeKeys.add(`${ep.season}:${ep.episode}`);
+            }
+          }
+        }
+        
         const totalEpisodes = episodes.length;
         let downloadedEpisodes = 0;
         let downloadingEpisodes = 0;
@@ -97,6 +157,8 @@ router.get('/', async (req, res) => {
           } else if ((ep as any).downloads?.some((d: any) => d.status === 'completed')) {
             downloadedEpisodes++;
           } else if ((ep as any).downloads?.some((d: any) => d.status === 'downloading')) {
+            downloadingEpisodes++;
+          } else if (ep.season && ep.episode && packEpisodeKeys.has(`${ep.season}:${ep.episode}`)) {
             downloadingEpisodes++;
           }
         }

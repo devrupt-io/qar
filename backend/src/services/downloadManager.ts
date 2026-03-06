@@ -1404,10 +1404,39 @@ class DownloadManager {
         console.log(`[configureFilePriorities] Set ${unwantedFileIds.length} files to skip`);
       }
 
-      // Set wanted files to priority 1 (normal)
+      // Set wanted files with sequential priority: first episode gets max (7),
+      // second gets high (6), rest get normal (1). This ensures episodes
+      // download roughly in order.
       if (wantedFileIds.length > 0) {
-        await qbittorrentService.setFilePriority(torrentHash, wantedFileIds, 1);
-        console.log(`[configureFilePriorities] Set ${wantedFileIds.length} files to download`);
+        // Sort wanted episodes by season then episode
+        const sortedWanted = [...wantedEpisodes].sort((a, b) => 
+          a.season !== b.season ? a.season - b.season : a.episode - b.episode
+        );
+        
+        // Build a map from episode key to priority (7=max, 6=high, 1=normal)
+        const episodePriority = new Map<string, number>();
+        sortedWanted.forEach((ep, idx) => {
+          const key = `${ep.season}:${ep.episode}`;
+          if (idx === 0) episodePriority.set(key, 7);      // maximum
+          else if (idx === 1) episodePriority.set(key, 6);  // high
+          else episodePriority.set(key, 1);                 // normal
+        });
+        
+        // Group file IDs by priority
+        const byPriority = new Map<number, number[]>();
+        for (const file of files) {
+          if (!wantedFileIds.includes(file.index)) continue;
+          const epInfo = this.extractEpisodeFromFilename(file.name);
+          const key = epInfo ? `${epInfo.season}:${epInfo.episode}` : null;
+          const prio = key ? (episodePriority.get(key) || 1) : 1;
+          if (!byPriority.has(prio)) byPriority.set(prio, []);
+          byPriority.get(prio)!.push(file.index);
+        }
+        
+        for (const [prio, ids] of byPriority) {
+          await qbittorrentService.setFilePriority(torrentHash, ids, prio);
+          console.log(`[configureFilePriorities] Set ${ids.length} files to priority ${prio}`);
+        }
       }
 
       return wantedFileIds.length;
