@@ -598,6 +598,51 @@ router.delete('/tv/show/:title', async (req, res) => {
   }
 });
 
+// Delete only the stored media files for a TV show, preserving all metadata
+router.post('/tv/show/:title/delete-files', async (req, res) => {
+  try {
+    const { title } = req.params;
+    const { season } = req.query;
+    
+    const where: any = { type: 'tv', title };
+    if (season) where.season = parseInt(season as string, 10);
+    
+    const episodes = await MediaItem.findAll({ where });
+    if (episodes.length === 0) {
+      return res.status(404).json({ error: 'No episodes found' });
+    }
+    
+    let filesDeleted = 0;
+    const seenHashes = new Set<string>();
+    
+    for (const episode of episodes) {
+      if (episode.filePath && episode.diskPath) {
+        await mediaService.deleteDownloadedFile(episode);
+        filesDeleted++;
+      }
+      // Remove associated downloads and torrents
+      const downloads = await Download.findAll({ where: { mediaItemId: episode.id } });
+      for (const download of downloads) {
+        if (download.torrentHash && !seenHashes.has(download.torrentHash)) {
+          seenHashes.add(download.torrentHash);
+          await qbittorrentService.deleteTorrent(download.torrentHash, true);
+        }
+      }
+      await Download.destroy({ where: { mediaItemId: episode.id } });
+    }
+    
+    res.json({
+      success: true,
+      filesDeleted,
+      totalEpisodes: episodes.length,
+      message: `Freed space for ${filesDeleted} episode(s). Metadata preserved.`,
+    });
+  } catch (error) {
+    console.error('Delete TV show files error:', error);
+    res.status(500).json({ error: 'Failed to delete TV show files' });
+  }
+});
+
 // Add web content to the library
 router.post('/web', async (req, res) => {
   try {

@@ -22,7 +22,8 @@ import {
   XCircle,
   Loader2,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  FileX
 } from 'lucide-react';
 
 interface Episode {
@@ -73,6 +74,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
     title: string;
     message: string;
     confirmText: string;
+    variant?: 'danger' | 'warning';
     onConfirm: () => Promise<void>;
   }>({ isOpen: false, title: '', message: '', confirmText: 'Confirm', onConfirm: async () => {} });
 
@@ -125,9 +127,9 @@ function TVShowDetailsContent({ id }: { id: string }) {
       if (confirmInfo.requiresConfirmation) {
         setConfirmModal({
           isOpen: true,
-          title: 'Delete TV Show',
-          message: `${confirmInfo.message}\n\nAre you sure you want to continue?\n\nFiles will be moved to trash for potential recovery.`,
-          confirmText: 'Delete Show',
+          title: 'Remove from Library',
+          message: `This will remove "${show.title}" from your library, including all ${confirmInfo.totalEpisodes} episodes and their metadata.\n\nDownloaded files will be moved to trash.`,
+          confirmText: 'Remove from Library',
           onConfirm: async () => {
             setIsDeleting(true);
             try {
@@ -144,13 +146,72 @@ function TVShowDetailsContent({ id }: { id: string }) {
           },
         });
       } else {
-        // Deletion was immediate (shouldn't happen, but handle it)
         router.push('/library');
       }
     } catch (err) {
       console.error('Failed to delete:', err);
       setIsDeleting(false);
     }
+  };
+
+  const handleFreeUpSpace = async (season?: number) => {
+    if (!show) return;
+    
+    const scope = season !== undefined ? `Season ${season}` : show.title;
+    const episodes = season !== undefined
+      ? show.episodes.filter(ep => ep.season === season)
+      : show.episodes;
+    const filesCount = episodes.filter(ep => ep.filePath && ep.diskPath).length;
+    
+    if (filesCount === 0) {
+      setNotification({ type: 'info', message: `No downloaded files to remove for ${scope}` });
+      setTimeout(() => setNotification(null), 3000);
+      return;
+    }
+    
+    setConfirmModal({
+      isOpen: true,
+      title: 'Free Up Space',
+      message: `This will delete ${filesCount} downloaded file(s) for ${scope}.\n\nThe show and episode metadata will be preserved in your library. Files will be moved to trash.`,
+      confirmText: 'Free Up Space',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          await api.deleteTvShowFiles(show.title, season);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setNotification({ type: 'success', message: `Freed space for ${scope}` });
+          setTimeout(() => setNotification(null), 3000);
+          loadShowDetails();
+        } catch (err) {
+          console.error('Failed to free up space:', err);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  const handleFreeUpEpisode = async (episode: Episode) => {
+    if (!show) return;
+    
+    setConfirmModal({
+      isOpen: true,
+      title: 'Free Up Space',
+      message: `Delete downloaded file for S${String(episode.season).padStart(2, '0')}E${String(episode.episode).padStart(2, '0')}?\n\nThe episode metadata will be preserved. File will be moved to trash.`,
+      confirmText: 'Free Up Space',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          await api.deleteMediaFiles(episode.id);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setNotification({ type: 'success', message: `Freed space for E${String(episode.episode).padStart(2, '0')}` });
+          setTimeout(() => setNotification(null), 3000);
+          loadShowDetails();
+        } catch (err) {
+          console.error('Failed to free up space:', err);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   const toggleSeason = (season: number) => {
@@ -467,6 +528,16 @@ function TVShowDetailsContent({ id }: { id: string }) {
               </a>
             )}
 
+            {show.episodes.some(ep => ep.filePath && ep.diskPath) && (
+              <button
+                onClick={() => handleFreeUpSpace()}
+                className="btn-secondary text-orange-400 hover:text-orange-300 flex items-center gap-2"
+              >
+                <FileX className="w-5 h-5" />
+                Free Up Space
+              </button>
+            )}
+
             <button
               onClick={handleDelete}
               disabled={isDeleting}
@@ -477,7 +548,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
               ) : (
                 <Trash2 className="w-5 h-5" />
               )}
-              Delete
+              Remove from Library
             </button>
           </div>
         </div>
@@ -516,6 +587,18 @@ function TVShowDetailsContent({ id }: { id: string }) {
                   <span className="text-sm text-slate-400">
                     {downloadedInSeason} downloaded
                   </span>
+                  {downloadedInSeason > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFreeUpSpace(season);
+                      }}
+                      className="text-sm py-1 px-3 flex items-center gap-1 text-orange-400 hover:text-orange-300"
+                    >
+                      <FileX className="w-4 h-4" />
+                      Free Up Space
+                    </button>
+                  )}
                   {!allDownloaded && (
                     <button
                       onClick={(e) => {
@@ -557,15 +640,24 @@ function TVShowDetailsContent({ id }: { id: string }) {
                           <div className="flex items-center gap-3">
                             <span className={status.color}>{status.label}</span>
                             {isAvailable ? (
-                              <a
-                                href="/jellyfin-redirect"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn-primary text-sm py-1 px-3 flex items-center gap-1"
-                              >
-                                <Play className="w-4 h-4" />
-                                Watch
-                              </a>
+                              <>
+                                <a
+                                  href="/jellyfin-redirect"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn-primary text-sm py-1 px-3 flex items-center gap-1"
+                                >
+                                  <Play className="w-4 h-4" />
+                                  Watch
+                                </a>
+                                <button
+                                  onClick={() => handleFreeUpEpisode(episode)}
+                                  className="text-sm py-1 px-2 text-orange-400 hover:text-orange-300"
+                                  title="Free Up Space"
+                                >
+                                  <FileX className="w-4 h-4" />
+                                </button>
+                              </>
                             ) : !isDownloading ? (
                               <button
                                 onClick={() => openDownloadModal('episode', episode.season, episode)}
@@ -632,7 +724,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
         title={confirmModal.title}
         message={confirmModal.message}
         confirmText={confirmModal.confirmText}
-        variant="danger"
+        variant={confirmModal.variant || 'danger'}
         isLoading={isDeleting}
       />
 

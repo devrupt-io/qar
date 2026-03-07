@@ -168,6 +168,14 @@ export const api = {
     });
   },
 
+  // Delete stored files for a TV show or season, preserving metadata
+  deleteTvShowFiles: (title: string, season?: number) => {
+    const params = season !== undefined ? `?season=${season}` : '';
+    return fetchApi(`/media/tv/show/${encodeURIComponent(title)}/delete-files${params}`, {
+      method: 'POST',
+    });
+  },
+
   // Delete entire TV show (all episodes)
   deleteTvShow: (title: string, deleteFiles?: boolean) => {
     const params = deleteFiles ? '?deleteFiles=true' : '';
