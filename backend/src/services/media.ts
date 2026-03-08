@@ -1101,24 +1101,25 @@ export class MediaService {
       // Get the file path
       const filePath = await this.getMediaFilePath(media);
       
-      if (!filePath) {
-        return { success: false, message: 'No downloaded file found for this media item' };
+      if (filePath) {
+        // Move the file to trash
+        const trashPath = await this.moveToTrash(filePath);
+        if (!trashPath) {
+          // Move failed, but still clear DB fields since we're deleting
+          console.warn(`Failed to move file to trash: ${filePath}`);
+        }
+        
+        // Try to clean up empty directories
+        const fileDir = path.dirname(filePath);
+        await this.removeEmptyDirectory(fileDir);
       }
       
-      // Move the file to trash
-      const trashPath = await this.moveToTrash(filePath);
-      if (!trashPath) {
-        return { success: false, message: 'Failed to move file to trash' };
+      // Always clear file path fields, even if file wasn't found on disk
+      if (media.filePath || media.diskPath) {
+        media.filePath = undefined;
+        media.diskPath = undefined;
+        await media.save();
       }
-      
-      // Try to clean up empty directories
-      const fileDir = path.dirname(filePath);
-      await this.removeEmptyDirectory(fileDir);
-      
-      // Update the media item to clear file path
-      media.filePath = undefined;
-      media.diskPath = undefined;
-      await media.save();
       
       // Update .strm file to point back to progress video
       const strmPath = await this.updateStrmFileToProgressUrl(media);
@@ -1134,7 +1135,7 @@ export class MediaService {
         }
       }
       
-      return { success: true, message: `File moved to trash: ${trashPath}` };
+      return { success: true, message: filePath ? `File moved to trash` : 'File path cleared (file not found on disk)' };
     } catch (e: any) {
       console.error('Error deleting downloaded file:', e);
       return { success: false, message: e.message || 'Failed to delete downloaded file' };

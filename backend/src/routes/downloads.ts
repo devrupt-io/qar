@@ -37,7 +37,18 @@ router.get('/active', async (req, res) => {
       order: [['createdAt', 'DESC']],
     });
 
-    res.json({ downloads });
+    // Deduplicate by torrentHash - keep the newest record per hash
+    const seen = new Map<string, Download>();
+    const deduped: Download[] = [];
+    for (const dl of downloads) {
+      const key = dl.torrentHash || dl.id;
+      if (!seen.has(key)) {
+        seen.set(key, dl);
+        deduped.push(dl);
+      }
+    }
+
+    res.json({ downloads: deduped });
   } catch (error) {
     console.error('Get active downloads error:', error);
     res.status(500).json({ error: 'Failed to get active downloads' });
