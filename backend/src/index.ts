@@ -22,6 +22,7 @@ import scannerRoutes from './routes/scanner';
 import recommendationsRoutes from './routes/recommendations';
 import { contentScannerService } from './services/contentScanner';
 import { openRouterService } from './services/ai';
+import { mediaService } from './services/media';
 
 const app = express();
 
@@ -258,6 +259,11 @@ async function start() {
     // Start the content scanner (scans every hour, rate-limited to 100 items/hour)
     // This recovers media from existing content/ and storage/ directories
     contentScannerService.start(60 * 60 * 1000);
+    
+    // Validate file paths on startup - clears stale entries where files were deleted
+    mediaService.validateFilePaths().catch(err => {
+      console.error('Error validating file paths:', err);
+    });
     
     app.listen(config.port, () => {
       console.log(`Backend server running on port ${config.port}`);

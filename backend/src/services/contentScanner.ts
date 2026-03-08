@@ -931,6 +931,9 @@ class ContentScannerService {
       // Save scan timestamp
       await this.saveScanTimestamp();
       
+      // Validate file paths - clear any stale entries where files were deleted
+      await mediaService.validateFilePaths();
+      
     } catch (error) {
       console.error('[ContentScanner] Scan failed:', error);
       this.scanProgress.phase = 'idle';

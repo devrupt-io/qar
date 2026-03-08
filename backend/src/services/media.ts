@@ -196,6 +196,37 @@ export class MediaService {
     return totalBytes;
   }
 
+  // Validate that all media items with filePath/diskPath still have files on disk.
+  // Clears stale entries where the file no longer exists.
+  async validateFilePaths(): Promise<{ checked: number; cleared: number }> {
+    const items = await MediaItem.findAll({
+      where: {
+        filePath: { [require('sequelize').Op.ne]: null },
+        diskPath: { [require('sequelize').Op.ne]: null },
+      },
+    });
+
+    let cleared = 0;
+    for (const item of items) {
+      if (item.filePath && item.diskPath) {
+        const fullPath = path.join(item.diskPath, item.filePath);
+        try {
+          await stat(fullPath);
+        } catch {
+          // File doesn't exist - clear the stale path
+          console.log(`[MediaService] Clearing stale file path for ${item.title}: ${fullPath}`);
+          await item.update({ filePath: undefined as any, diskPath: undefined as any });
+          cleared++;
+        }
+      }
+    }
+
+    if (cleared > 0) {
+      console.log(`[MediaService] Validated file paths: ${items.length} checked, ${cleared} stale entries cleared`);
+    }
+    return { checked: items.length, cleared };
+  }
+
   // Find the best disk for a new media item
   async findBestDisk(type: MediaType, title: string): Promise<string> {
     const disks = await this.getDiskStats();
