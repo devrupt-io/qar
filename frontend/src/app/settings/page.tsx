@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { Settings, Save, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle, XCircle, HardDrive, Film, Tv, X, Plus, Sparkles, Shield, Gauge, Key, Download, RotateCcw } from 'lucide-react';
+import { Settings, Save, Eye, EyeOff, RefreshCw, CheckCircle, AlertCircle, XCircle, HardDrive, Film, Tv, X, Plus, Sparkles, Shield, Gauge, Key, Download, RotateCcw, Trash2 } from 'lucide-react';
 
 interface SettingsData {
   vpnUsername?: string;
@@ -16,6 +16,8 @@ interface SettingsData {
   omdbApiKey?: string;
   openrouterApiKey?: string;
   openrouterModel?: string;
+  // Auto-download setting
+  autoDownloadEnabled?: string;
   // Torrent search preferences (arrays for multi-select)
   preferredCodecs?: string[];
   preferredResolutions?: string[];
@@ -80,6 +82,86 @@ const SUGGESTED_GROUPS = [
   'tigole',
   'qxr',
 ];
+
+function TrashManagement() {
+  const [trashInfo, setTrashInfo] = useState<{ size: number; fileCount: number; formattedSize: string } | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    loadTrashInfo();
+  }, []);
+
+  const loadTrashInfo = async () => {
+    try {
+      const info = await api.getTrashInfo();
+      setTrashInfo(info);
+    } catch {
+      setTrashInfo(null);
+    }
+  };
+
+  const handleClearTrash = async () => {
+    if (!confirm('Are you sure you want to permanently delete all files in the trash? This cannot be undone.')) return;
+    setClearing(true);
+    setMessage(null);
+    try {
+      const result = await api.clearTrash();
+      setMessage({ type: 'success', text: result.message });
+      await loadTrashInfo();
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to clear trash' });
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <section className="card mt-6">
+      <div className="flex items-center gap-3 mb-4">
+        <Trash2 className="w-6 h-6 text-red-400" />
+        <h2 className="text-xl font-bold">Trash</h2>
+      </div>
+      <p className="text-slate-400 mb-4">
+        Deleted media files are moved to trash for recovery. Clear the trash to free up disk space.
+      </p>
+
+      <div className="bg-slate-700/50 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            {trashInfo ? (
+              <>
+                <p className="font-medium">{trashInfo.formattedSize}</p>
+                <p className="text-sm text-slate-400">
+                  {trashInfo.fileCount} {trashInfo.fileCount === 1 ? 'file' : 'files'} in trash
+                </p>
+              </>
+            ) : (
+              <p className="text-slate-400">Loading trash info...</p>
+            )}
+          </div>
+          <button
+            className="btn-danger flex items-center gap-2 text-sm"
+            onClick={handleClearTrash}
+            disabled={clearing || !trashInfo || trashInfo.fileCount === 0}
+          >
+            {clearing ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+            {clearing ? 'Clearing...' : 'Empty Trash'}
+          </button>
+        </div>
+        {message && (
+          <div className={`mt-3 text-sm ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+            {message.text}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 export default function SettingsPage() {
   return (
@@ -921,6 +1003,35 @@ function SettingsPageContent() {
               <Film className="w-6 h-6 text-primary-400" />
               <h2 className="text-xl font-bold">Torrent Search Preferences</h2>
             </div>
+            
+            {/* Auto-Download Toggle */}
+            <div className="mb-6 p-4 bg-slate-700/50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium">Automatic Download</h3>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Automatically find and download content when you try to watch something that hasn&apos;t been downloaded yet.
+                    Uses your quality preferences below to select the best torrent.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSettings({ ...settings, autoDownloadEnabled: settings.autoDownloadEnabled === 'false' ? 'true' : 'false' })}
+                  className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    settings.autoDownloadEnabled !== 'false' ? 'bg-primary-600' : 'bg-slate-600'
+                  }`}
+                  role="switch"
+                  aria-checked={settings.autoDownloadEnabled !== 'false'}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      settings.autoDownloadEnabled !== 'false' ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+            
             <p className="text-slate-400 mb-4">
               Configure your preferred quality settings. Torrents matching these preferences will be scored higher during auto-download.
               Click suggestions to add them, or type your own custom values.
@@ -1184,6 +1295,11 @@ function SettingsPageContent() {
               </div>
             )}
           </section>
+          )}
+
+          {/* Trash Management - shown in storage section */}
+          {activeSection === 'storage' && (
+          <TrashManagement />
           )}
 
         </div>

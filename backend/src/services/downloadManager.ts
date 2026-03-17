@@ -1335,9 +1335,9 @@ class DownloadManager {
    */
   async getDownloadHistory(limit = 50): Promise<Download[]> {
     return Download.findAll({
-      where: { status: 'completed' },
+      where: { status: { [Op.in]: ['completed', 'failed'] } },
       include: [{ model: MediaItem, as: 'mediaItem' }],
-      order: [['completedAt', 'DESC']],
+      order: [['updatedAt', 'DESC']],
       limit,
     });
   }

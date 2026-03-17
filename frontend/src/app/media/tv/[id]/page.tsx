@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { getMediaStatusText } from '@/lib/mediaStatus';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import TorrentSearch from '@/components/TorrentSearch';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -33,6 +34,7 @@ interface Episode {
   episode: number;
   filePath?: string;
   diskPath?: string;
+  hasFile?: boolean;
   downloads?: Array<{
     id: string;
     status: string;
@@ -161,7 +163,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
     const episodes = season !== undefined
       ? show.episodes.filter(ep => ep.season === season)
       : show.episodes;
-    const filesCount = episodes.filter(ep => ep.filePath && ep.diskPath).length;
+    const filesCount = episodes.filter(ep => ep.hasFile).length;
     
     if (filesCount === 0) {
       setNotification({ type: 'info', message: `No downloaded files to remove for ${scope}` });
@@ -252,12 +254,22 @@ function TVShowDetailsContent({ id }: { id: string }) {
   const handleDownload = async (magnetUri: string, detected?: DetectedEpisodes) => {
     if (!show) return;
     
+    // If auto-download was triggered from TorrentSearch, just close modal
+    if (magnetUri === '__auto__') {
+      setShowDownloadModal(false);
+      setSelectedEpisodeForDownload(null);
+      setNotification({ type: 'success', message: 'Auto-download started!' });
+      setTimeout(() => setNotification(null), 3000);
+      loadShowDetails();
+      return;
+    }
+    
     try {
       // Handle single episode download
       if (downloadMode === 'episode' && selectedEpisodeForDownload) {
         const episode = selectedEpisodeForDownload;
         
-        if (episode.filePath && episode.diskPath) {
+        if (episode.hasFile) {
           setNotification({ type: 'info', message: 'Episode is already downloaded!' });
           setShowDownloadModal(false);
           setTimeout(() => setNotification(null), 3000);
@@ -292,7 +304,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
         ? show.episodes
         : show.episodes.filter(ep => ep.season === selectedSeasonForDownload)
       ).filter(ep => {
-        if (ep.filePath && ep.diskPath) return false;
+        if (ep.hasFile) return false;
         const hasActiveDownload = ep.downloads?.some(
           (d: any) => d.status === 'downloading' || d.status === 'pending' || d.status === 'paused'
         );
@@ -343,30 +355,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
   };
 
   const getEpisodeStatus = (episode: Episode): { label: string; color: string } => {
-    if (episode.filePath && episode.diskPath) {
-      return { label: 'Available', color: 'text-green-400' };
-    }
-    
-    const download = episode.downloads?.[0];
-    if (download) {
-      if (download.status === 'completed') {
-        return { label: 'Downloaded', color: 'text-green-400' };
-      }
-      if (download.status === 'downloading') {
-        return { label: `${download.progress.toFixed(0)}%`, color: 'text-primary-400' };
-      }
-      if (download.status === 'pending') {
-        return { label: 'Pending', color: 'text-yellow-400' };
-      }
-      if (download.status === 'paused') {
-        return { label: 'Paused', color: 'text-yellow-400' };
-      }
-      if (download.status === 'failed') {
-        return { label: 'Failed', color: 'text-red-400' };
-      }
-    }
-    
-    return { label: 'Not Downloaded', color: 'text-slate-400' };
+    return getMediaStatusText(episode);
   };
 
   // Group episodes by season
@@ -385,7 +374,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
   // Calculate stats
   const totalEpisodes = show?.episodes.length || 0;
   const downloadedEpisodes = show?.episodes.filter(ep => 
-    (ep.filePath && ep.diskPath) || ep.downloads?.some(d => d.status === 'completed')
+    ep.hasFile || ep.downloads?.some(d => d.status === 'completed')
   ).length || 0;
 
   if (loading) {
@@ -528,7 +517,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
               </a>
             )}
 
-            {show.episodes.some(ep => ep.filePath && ep.diskPath) && (
+            {show.episodes.some(ep => ep.hasFile) && (
               <button
                 onClick={() => handleFreeUpSpace()}
                 className="btn-secondary text-orange-400 hover:text-orange-300 flex items-center gap-2"
@@ -561,7 +550,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
         {sortedSeasons.map(season => {
           const seasonEpisodes = episodesBySeason[season];
           const downloadedInSeason = seasonEpisodes.filter(ep => 
-            (ep.filePath && ep.diskPath) || ep.downloads?.some(d => d.status === 'completed')
+            ep.hasFile || ep.downloads?.some(d => d.status === 'completed')
           ).length;
           const allDownloaded = downloadedInSeason === seasonEpisodes.length;
           
@@ -621,7 +610,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
                     .sort((a, b) => (a.episode || 0) - (b.episode || 0))
                     .map(episode => {
                       const status = getEpisodeStatus(episode);
-                      const isAvailable = episode.filePath && episode.diskPath;
+                      const isAvailable = episode.hasFile;
                       const isDownloading = episode.downloads?.some(
                         d => d.status === 'downloading' || d.status === 'pending'
                       );
@@ -710,6 +699,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
               episode={downloadMode === 'episode' && selectedEpisodeForDownload ? selectedEpisodeForDownload.episode : undefined}
               defaultSearchMode={downloadMode === 'episode' ? 'episode' : downloadMode}
               totalSeasons={show.totalSeasons}
+              mediaId={downloadMode === 'episode' && selectedEpisodeForDownload ? selectedEpisodeForDownload.id : undefined}
               onSelect={handleDownload}
             />
           </div>

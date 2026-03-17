@@ -27,7 +27,8 @@ import {
   Copy,
   Check,
   Link as LinkIcon,
-  FileX
+  FileX,
+  Zap
 } from 'lucide-react';
 
 interface MediaDetails {
@@ -68,6 +69,8 @@ function MediaDetailsContent({ id }: { id: string }) {
   const [showTorrentSearch, setShowTorrentSearch] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [jellyfinUrl, setJellyfinUrl] = useState<string | null>(null);
+  const [autoDownloading, setAutoDownloading] = useState(false);
+  const [autoDownloadMessage, setAutoDownloadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -258,6 +261,27 @@ function MediaDetailsContent({ id }: { id: string }) {
       loadMediaDetails();
     } catch (err) {
       console.error('Failed to start download:', err);
+    }
+  };
+
+  const handleAutoDownload = async () => {
+    if (!media) return;
+    setAutoDownloading(true);
+    setAutoDownloadMessage(null);
+    try {
+      const result = await api.autoDownload(media.id);
+      if (result.success) {
+        setAutoDownloadMessage({ type: 'success', text: result.message });
+        setShowTorrentSearch(false);
+        loadMediaDetails();
+      } else {
+        setAutoDownloadMessage({ type: 'error', text: result.message });
+      }
+    } catch (err) {
+      console.error('Auto-download failed:', err);
+      setAutoDownloadMessage({ type: 'error', text: 'Auto-download failed. Try selecting a torrent manually.' });
+    } finally {
+      setAutoDownloading(false);
     }
   };
 
@@ -541,13 +565,27 @@ function MediaDetailsContent({ id }: { id: string }) {
                   Watch Now
                 </a>
               ) : !media.downloads?.length || media.downloads[0].status === 'failed' ? (
-                <button
-                  onClick={() => setShowTorrentSearch(true)}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-colors"
-                >
-                  <Download className="w-5 h-5" />
-                  Download
-                </button>
+                <>
+                  <button
+                    onClick={handleAutoDownload}
+                    disabled={autoDownloading}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-colors"
+                  >
+                    {autoDownloading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Zap className="w-5 h-5" />
+                    )}
+                    {autoDownloading ? 'Finding...' : 'Auto Download'}
+                  </button>
+                  <button
+                    onClick={() => setShowTorrentSearch(true)}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition-colors"
+                  >
+                    <Download className="w-5 h-5" />
+                    Choose Torrent
+                  </button>
+                </>
               ) : null}
               {media.downloads?.[0] && ['downloading', 'pending', 'paused'].includes(media.downloads[0].status) && (
                 <Link
@@ -559,6 +597,22 @@ function MediaDetailsContent({ id }: { id: string }) {
                 </Link>
               )}
             </div>
+
+            {/* Auto-download status message */}
+            {autoDownloadMessage && (
+              <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 text-sm ${
+                autoDownloadMessage.type === 'success' 
+                  ? 'bg-green-900/30 border border-green-600/50 text-green-400' 
+                  : 'bg-red-900/30 border border-red-600/50 text-red-400'
+              }`}>
+                {autoDownloadMessage.type === 'success' ? (
+                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 flex-shrink-0" />
+                )}
+                {autoDownloadMessage.text}
+              </div>
+            )}
 
             {/* Secondary Actions */}
             <div className="flex flex-wrap gap-3">
@@ -692,6 +746,8 @@ function MediaDetailsContent({ id }: { id: string }) {
               season={media.season}
               episode={media.episode}
               defaultSearchMode={media.type === 'tv' ? 'episode' : undefined}
+              mediaId={media.id}
+              onAutoDownload={handleAutoDownload}
               onSelect={handleDownload}
             />
           </div>

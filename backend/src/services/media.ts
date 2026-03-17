@@ -215,7 +215,7 @@ export class MediaService {
         } catch {
           // File doesn't exist - clear the stale path
           console.log(`[MediaService] Clearing stale file path for ${item.title}: ${fullPath}`);
-          await item.update({ filePath: undefined as any, diskPath: undefined as any });
+          await item.update({ filePath: null as any, diskPath: null as any });
           cleared++;
         }
       }
@@ -478,6 +478,23 @@ export class MediaService {
       }
     } catch (e: any) {
       // Directory doesn't exist or other error - ignore
+    }
+  }
+
+  // Quick check whether the file recorded in the DB actually exists on disk.
+  // Unlike getMediaFilePath this does NOT search all disks – it only checks the
+  // stored path, making it suitable for use in list endpoints.  When the file is
+  // missing it also clears the stale DB fields so future checks are consistent.
+  async checkFileExists(media: MediaItem): Promise<boolean> {
+    if (!media.filePath || !media.diskPath) return false;
+    const fullPath = path.join(media.diskPath, media.filePath);
+    try {
+      await stat(fullPath);
+      return true;
+    } catch {
+      // File no longer on disk – clear stale DB fields
+      await media.update({ filePath: null as any, diskPath: null as any });
+      return false;
     }
   }
 

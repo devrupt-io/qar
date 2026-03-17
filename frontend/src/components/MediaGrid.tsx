@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Film, Tv, Globe, Pin } from 'lucide-react';
+import { getMediaStatus, getTvShowStatus } from '@/lib/mediaStatus';
 
 interface MediaItem {
   id: string;
@@ -18,6 +19,7 @@ interface MediaItem {
   magnetUri?: string;
   filePath?: string;
   diskPath?: string;
+  hasFile?: boolean;
   pinned?: boolean;
   downloads?: Array<{ status: string; progress: number; completedAt?: string }>;
   // TV show specific fields
@@ -108,51 +110,13 @@ export default function MediaGrid({ items }: Props) {
   };
 
   const getStatus = (item: MediaItem): { label: string; color: string } => {
-    // For TV shows, show episode download counts
+    // For TV shows, use the aggregated episode counts
     if (item.type === 'tv' && item.totalEpisodes !== undefined) {
-      const downloaded = item.downloadedEpisodes || 0;
-      const total = item.totalEpisodes;
-      
-      if (downloaded === total && total > 0) {
-        return { label: `All ${total} Downloaded`, color: 'bg-green-500' };
-      }
-      if (downloaded > 0) {
-        return { label: `${downloaded}/${total} Downloaded`, color: 'bg-green-500' };
-      }
-      if (item.downloadingEpisodes && item.downloadingEpisodes > 0) {
-        return { label: `Downloading ${item.downloadingEpisodes}`, color: 'bg-primary-500' };
-      }
-      return { label: `${total} Episodes`, color: 'bg-slate-500' };
+      return getTvShowStatus(item);
     }
     
-    // Check if file is available on disk
-    if (item.filePath && item.diskPath) {
-      return { label: 'Available', color: 'bg-green-500' };
-    }
-    
-    const download = item.downloads?.[0];
-    if (download) {
-      // Download completed (file may still be processing or already moved)
-      if (download.status === 'completed') {
-        // If download is completed but file path not set yet, show as "Downloaded"
-        // The file may still be processing/moving
-        return { label: 'Downloaded', color: 'bg-green-500' };
-      }
-      if (download.status === 'downloading') {
-        return { label: `${download.progress.toFixed(0)}%`, color: 'bg-primary-500' };
-      }
-      if (download.status === 'pending') {
-        return { label: 'Pending', color: 'bg-yellow-500' };
-      }
-      if (download.status === 'paused') {
-        return { label: 'Paused', color: 'bg-yellow-500' };
-      }
-      if (download.status === 'failed') {
-        return { label: 'Failed', color: 'bg-red-500' };
-      }
-    }
-    
-    return { label: 'Not Downloaded', color: 'bg-slate-500' };
+    // For individual items, use the shared utility (relies on backend hasFile)
+    return getMediaStatus(item);
   };
 
   // Get the correct URL for this item

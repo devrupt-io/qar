@@ -17,7 +17,7 @@
  * the system will automatically attempt to find and download it.
  */
 import { Router } from 'express';
-import { MediaItem, Download } from '../models';
+import { MediaItem, Download, Setting } from '../models';
 import { slugify } from '../services/media';
 import { progressVideoService } from '../services/progressVideo';
 import { qbittorrentService } from '../services/qbittorrent';
@@ -96,9 +96,19 @@ async function bumpDownloadPriority(media: MediaItem): Promise<void> {
 /**
  * Check if media needs auto-download and trigger it if so.
  * This runs when someone accesses content that isn't being downloaded.
+ * Respects the autoDownloadEnabled setting (defaults to true).
  */
 async function triggerAutoDownloadIfNeeded(media: MediaItem): Promise<void> {
   try {
+    // Check if auto-download is enabled (defaults to true)
+    const autoDownloadSetting = await Setting.findOne({ where: { key: 'autoDownloadEnabled' } });
+    const autoDownloadEnabled = !autoDownloadSetting || autoDownloadSetting.value !== 'false';
+    
+    if (!autoDownloadEnabled) {
+      console.log(`[Progress] Auto-download disabled by setting, skipping for: ${media.title}`);
+      return;
+    }
+
     // For TV episodes, check if there's an active download for any episode of this show
     // (A season pack download might be downloading this episode as part of a larger torrent)
     let hasActiveDownload = false;

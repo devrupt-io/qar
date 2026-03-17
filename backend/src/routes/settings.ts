@@ -102,10 +102,91 @@ router.get('/', async (req, res) => {
       settingsMap.preferredMovieGroup = config.defaults.preferredMovieGroups[0];
     }
     
+    // Auto-download enabled by default
+    if (!settingsMap.autoDownloadEnabled) {
+      settingsMap.autoDownloadEnabled = 'true';
+    }
+    
     res.json(settingsMap);
   } catch (error) {
     console.error('Get settings error:', error);
     res.status(500).json({ error: 'Failed to get settings' });
+  }
+});
+
+// Get trash directory size info
+router.get('/trash', async (_req, res) => {
+  try {
+    const trashPath = config.paths.trash;
+    
+    if (!fs.existsSync(trashPath)) {
+      return res.json({ size: 0, fileCount: 0, formattedSize: '0 B' });
+    }
+
+    let totalSize = 0;
+    let fileCount = 0;
+
+    const walkDir = (dir: string) => {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            walkDir(fullPath);
+          } else {
+            const stat = fs.statSync(fullPath);
+            totalSize += stat.size;
+            fileCount++;
+          }
+        }
+      } catch {
+        // Skip entries we can't read
+      }
+    };
+
+    walkDir(trashPath);
+
+    const formatSize = (bytes: number): string => {
+      if (bytes === 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+    };
+
+    res.json({ size: totalSize, fileCount, formattedSize: formatSize(totalSize) });
+  } catch (error) {
+    console.error('Get trash info error:', error);
+    res.status(500).json({ error: 'Failed to get trash info' });
+  }
+});
+
+// Clear trash directory
+router.delete('/trash', async (_req, res) => {
+  try {
+    const trashPath = config.paths.trash;
+    
+    if (!fs.existsSync(trashPath)) {
+      return res.json({ success: true, message: 'Trash is already empty' });
+    }
+
+    const entries = fs.readdirSync(trashPath, { withFileTypes: true });
+    let removedCount = 0;
+
+    for (const entry of entries) {
+      const fullPath = path.join(trashPath, entry.name);
+      try {
+        fs.rmSync(fullPath, { recursive: true, force: true });
+        removedCount++;
+      } catch (e) {
+        console.error(`Failed to remove trash entry: ${fullPath}`, e);
+      }
+    }
+
+    console.log(`Cleared trash: removed ${removedCount} entries`);
+    res.json({ success: true, message: `Cleared ${removedCount} items from trash` });
+  } catch (error) {
+    console.error('Clear trash error:', error);
+    res.status(500).json({ error: 'Failed to clear trash' });
   }
 });
 

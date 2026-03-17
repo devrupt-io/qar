@@ -423,6 +423,7 @@ export class AutoDownloadService {
         magnetUri: torrent.magnetUri!,
         status: 'pending',
         downloadReason,
+        isAutoDownload: true,
         detectedEpisodes: detectedEpisodes ? {
           type: detectedEpisodes.type,
           isComplete: detectedEpisodes.isComplete,

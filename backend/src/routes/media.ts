@@ -6,6 +6,7 @@ import { torrentSearchService } from '../services/torrentSearch';
 import { omdbService } from '../services/omdb';
 import { downloadManager } from '../services/downloadManager';
 import { jellyfinService } from '../services/jellyfin';
+import { autoDownloadService } from '../services/autoDownload';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
@@ -103,9 +104,10 @@ router.get('/tv/shows/:id', async (req, res) => {
       }
     }
     
-    // Augment episodes: inject per-file progress from pack downloads
-    const augmentedEpisodes = episodes.map(ep => {
+    // Augment episodes: inject per-file progress from pack downloads and verify files
+    const augmentedEpisodes = await Promise.all(episodes.map(async (ep) => {
       const epData = ep.toJSON() as any;
+      epData.hasFile = await mediaService.checkFileExists(ep);
       if (ep.season && ep.episode) {
         const key = `${ep.season}:${ep.episode}`;
         const info = episodeProgressMap.get(key);
@@ -120,7 +122,7 @@ router.get('/tv/shows/:id', async (req, res) => {
         }
       }
       return epData;
-    });
+    }));
     
     res.json({
       ...show.toJSON(),
@@ -131,6 +133,64 @@ router.get('/tv/shows/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to get TV show' });
   }
 });
+
+// Compute TV show stats (downloaded/downloading counts) with actual file verification.
+// Shared by all endpoints that return TV show data to ensure a single source of truth.
+async function getTvShowStats(show: TVShow, packDownloads?: boolean) {
+  const episodes = await MediaItem.findAll({
+    where: { type: 'tv', title: show.title },
+    include: [{ model: Download, as: 'downloads' }],
+  });
+
+  // Optionally find active pack downloads for richer downloading counts
+  const packEpisodeKeys = new Set<string>();
+  if (packDownloads) {
+    const activePackDownloads = await Download.findAll({
+      where: { status: ['pending', 'downloading', 'paused'] },
+      include: [{ model: MediaItem, as: 'mediaItem', where: { type: 'tv', title: show.title } }],
+    });
+    for (const dl of activePackDownloads) {
+      const detected = dl.detectedEpisodes;
+      if (detected?.episodes && detected.episodes.length > 1) {
+        for (const ep of detected.episodes) {
+          packEpisodeKeys.add(`${ep.season}:${ep.episode}`);
+        }
+      }
+    }
+  }
+
+  const totalEpisodes = episodes.length;
+  let downloadedEpisodes = 0;
+  let downloadingEpisodes = 0;
+
+  for (const ep of episodes) {
+    const hasFile = await mediaService.checkFileExists(ep);
+    if (hasFile) {
+      downloadedEpisodes++;
+    } else if ((ep as any).downloads?.some((d: any) => d.status === 'completed')) {
+      downloadedEpisodes++;
+    } else if ((ep as any).downloads?.some((d: any) => d.status === 'downloading')) {
+      downloadingEpisodes++;
+    } else if (packDownloads && ep.season && ep.episode && packEpisodeKeys.has(`${ep.season}:${ep.episode}`)) {
+      downloadingEpisodes++;
+    }
+  }
+
+  return {
+    ...show.toJSON(),
+    type: 'tv' as const,
+    totalEpisodes,
+    downloadedEpisodes,
+    downloadingEpisodes,
+    downloads: downloadingEpisodes > 0 ? [{ status: 'downloading', progress: 0 }] : [],
+  };
+}
+
+// Add verified hasFile to a media item's JSON representation
+async function addHasFile(item: MediaItem) {
+  const hasFile = await mediaService.checkFileExists(item);
+  return { ...item.toJSON(), hasFile };
+}
 
 // Get all media items
 // When type='tv', returns TVShow entities instead of individual episodes
@@ -144,59 +204,7 @@ router.get('/', async (req, res) => {
         order: [['createdAt', 'DESC']],
       });
       
-      // For each show, get episode count and download status
-      const showsWithStats = await Promise.all(shows.map(async (show) => {
-        const episodes = await MediaItem.findAll({
-          where: { type: 'tv', title: show.title },
-          include: [{ model: Download, as: 'downloads' }],
-        });
-        
-        // Find active pack downloads for this show
-        const activePackDownloads = await Download.findAll({
-          where: { status: ['pending', 'downloading', 'paused'] },
-          include: [{ model: MediaItem, as: 'mediaItem', where: { type: 'tv', title: show.title } }],
-        });
-        
-        // Build set of episodes covered by pack downloads
-        const packEpisodeKeys = new Set<string>();
-        let hasActivePackDownload = false;
-        for (const dl of activePackDownloads) {
-          const detected = dl.detectedEpisodes;
-          if (detected?.episodes && detected.episodes.length > 1) {
-            hasActivePackDownload = true;
-            for (const ep of detected.episodes) {
-              packEpisodeKeys.add(`${ep.season}:${ep.episode}`);
-            }
-          }
-        }
-        
-        const totalEpisodes = episodes.length;
-        let downloadedEpisodes = 0;
-        let downloadingEpisodes = 0;
-        
-        for (const ep of episodes) {
-          // Check if episode has a file on disk
-          if (ep.filePath && ep.diskPath) {
-            downloadedEpisodes++;
-          } else if ((ep as any).downloads?.some((d: any) => d.status === 'completed')) {
-            downloadedEpisodes++;
-          } else if ((ep as any).downloads?.some((d: any) => d.status === 'downloading')) {
-            downloadingEpisodes++;
-          } else if (ep.season && ep.episode && packEpisodeKeys.has(`${ep.season}:${ep.episode}`)) {
-            downloadingEpisodes++;
-          }
-        }
-        
-        return {
-          ...show.toJSON(),
-          type: 'tv' as const,
-          totalEpisodes,
-          downloadedEpisodes,
-          downloadingEpisodes,
-          // Include episode download info for status display
-          downloads: downloadingEpisodes > 0 ? [{ status: 'downloading', progress: 0 }] : [],
-        };
-      }));
+      const showsWithStats = await Promise.all(shows.map(show => getTvShowStats(show, true)));
       
       return res.json({ items: showsWithStats });
     }
@@ -215,45 +223,20 @@ router.get('/', async (req, res) => {
     // Filter out TV episodes when returning all media (they're shown via TVShow)
     const filteredItems = items.filter(item => item.type !== 'tv');
     
+    // Add hasFile verification for each non-TV item
+    const itemsWithHasFile = await Promise.all(filteredItems.map(addHasFile));
+    
     // If returning all media, also include TV shows
     if (!type) {
       const shows = await TVShow.findAll({
         order: [['createdAt', 'DESC']],
       });
       
-      const showsWithStats = await Promise.all(shows.map(async (show) => {
-        const episodes = await MediaItem.findAll({
-          where: { type: 'tv', title: show.title },
-          include: [{ model: Download, as: 'downloads' }],
-        });
-        
-        const totalEpisodes = episodes.length;
-        let downloadedEpisodes = 0;
-        let downloadingEpisodes = 0;
-        
-        for (const ep of episodes) {
-          if (ep.filePath && ep.diskPath) {
-            downloadedEpisodes++;
-          } else if ((ep as any).downloads?.some((d: any) => d.status === 'completed')) {
-            downloadedEpisodes++;
-          } else if ((ep as any).downloads?.some((d: any) => d.status === 'downloading')) {
-            downloadingEpisodes++;
-          }
-        }
-        
-        return {
-          ...show.toJSON(),
-          type: 'tv' as const,
-          totalEpisodes,
-          downloadedEpisodes,
-          downloadingEpisodes,
-          downloads: downloadingEpisodes > 0 ? [{ status: 'downloading', progress: 0 }] : [],
-        };
-      }));
+      const showsWithStats = await Promise.all(shows.map(show => getTvShowStats(show)));
       
-      const allItems = [...filteredItems.map(i => i.toJSON()), ...showsWithStats];
+      const allItems = [...itemsWithHasFile, ...showsWithStats];
       // Sort by createdAt (handle undefined dates)
-      allItems.sort((a, b) => {
+      allItems.sort((a: any, b: any) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
@@ -262,7 +245,7 @@ router.get('/', async (req, res) => {
       return res.json({ items: allItems });
     }
     
-    res.json({ items });
+    res.json({ items: itemsWithHasFile });
   } catch (error) {
     console.error('Get media error:', error);
     res.status(500).json({ error: 'Failed to get media items' });
@@ -551,7 +534,8 @@ router.delete('/tv/show/:title', async (req, res) => {
 
     // If not confirmed, return information about what will be deleted
     if (confirmed !== 'true') {
-      const downloadedCount = episodes.filter(ep => ep.filePath && ep.diskPath).length;
+      const fileChecks = await Promise.all(episodes.map(ep => mediaService.checkFileExists(ep)));
+      const downloadedCount = fileChecks.filter(Boolean).length;
       return res.json({
         requiresConfirmation: true,
         title,
@@ -616,7 +600,8 @@ router.post('/tv/show/:title/delete-files', async (req, res) => {
     const seenHashes = new Set<string>();
     
     for (const episode of episodes) {
-      if (episode.filePath && episode.diskPath) {
+      const hasFile = await mediaService.checkFileExists(episode);
+      if (hasFile) {
         await mediaService.deleteDownloadedFile(episode);
         filesDeleted++;
       }
@@ -716,6 +701,38 @@ router.post('/:id/search-torrents', async (req, res) => {
   } catch (error) {
     console.error('Search torrents error:', error);
     res.status(500).json({ error: 'Failed to search torrents' });
+  }
+});
+
+// Trigger auto-download for a media item
+// Uses the auto-download service to find and start the best torrent automatically
+router.post('/:id/auto-download', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const media = await MediaItem.findByPk(id);
+    if (!media) {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+    
+    const result = await autoDownloadService.attemptAutoDownload(media);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: result.message,
+        download: result.download,
+        reusingTorrent: result.reusingTorrent || false,
+      });
+    } else {
+      res.json({
+        success: false,
+        message: result.message,
+      });
+    }
+  } catch (error) {
+    console.error('Auto-download error:', error);
+    res.status(500).json({ error: 'Failed to auto-download' });
   }
 });
 

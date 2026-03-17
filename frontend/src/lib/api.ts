@@ -232,6 +232,12 @@ export const api = {
     });
   },
 
+  autoDownload: (mediaId: string) => {
+    return fetchApi(`/media/${mediaId}/auto-download`, {
+      method: 'POST',
+    });
+  },
+
   // Downloads
   getDownloads: () => {
     return fetchApi('/downloads');
@@ -317,6 +323,16 @@ export const api = {
   restartVpn: () => {
     return fetchApi('/settings/vpn/restart', {
       method: 'POST',
+    });
+  },
+
+  getTrashInfo: () => {
+    return fetchApi('/settings/trash');
+  },
+
+  clearTrash: () => {
+    return fetchApi('/settings/trash', {
+      method: 'DELETE',
     });
   },
 

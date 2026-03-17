@@ -135,6 +135,8 @@ interface DownloadAttributes {
   };
   // Human-readable reason for the download (e.g., "Movie: The Matrix (1999)", "TV: Breaking Bad S01E01")
   downloadReason?: string;
+  // Whether this download was initiated by the auto-download system
+  isAutoDownload?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -165,6 +167,7 @@ export class Download extends Model<DownloadAttributes, DownloadCreationAttribut
     description: string;
   };
   public downloadReason?: string;
+  public isAutoDownload?: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -235,6 +238,10 @@ Download.init(
     downloadReason: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    isAutoDownload: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
   },
   {

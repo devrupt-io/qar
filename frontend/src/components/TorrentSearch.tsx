@@ -57,6 +57,10 @@ interface Props {
   // Episodes per season for validation
   episodesPerSeason?: Record<number, number>;
   onSelect: (magnetUri: string, detected?: DetectedEpisodes) => void;
+  // Optional: media item ID for auto-download support
+  mediaId?: string;
+  // Optional: callback for auto-download
+  onAutoDownload?: () => void;
 }
 
 export default function TorrentSearch({ 
@@ -68,7 +72,9 @@ export default function TorrentSearch({
   defaultSearchMode,
   totalSeasons,
   episodesPerSeason,
-  onSelect 
+  onSelect,
+  mediaId,
+  onAutoDownload
 }: Props) {
   const [results, setResults] = useState<TorrentResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,6 +103,10 @@ export default function TorrentSearch({
 
   // Manual magnet/hash input
   const [manualMagnet, setManualMagnet] = useState('');
+
+  // Auto-download state
+  const [autoDownloading, setAutoDownloading] = useState(false);
+  const [autoDownloadResult, setAutoDownloadResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Update search mode when defaultSearchMode changes
   useEffect(() => {
@@ -406,6 +416,63 @@ export default function TorrentSearch({
           </div>
         )}
       </div>
+
+      {/* Auto Download Option */}
+      {mediaId && (
+        <div className="p-3 bg-slate-700/50 rounded-lg">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">Auto Download</p>
+              <p className="text-xs text-slate-400">
+                Automatically find and start the best torrent based on your quality preferences.
+              </p>
+            </div>
+            <button
+              className="btn-primary flex items-center gap-2 text-sm py-2 px-4 flex-shrink-0"
+              onClick={async () => {
+                if (onAutoDownload) {
+                  onAutoDownload();
+                  return;
+                }
+                setAutoDownloading(true);
+                setAutoDownloadResult(null);
+                try {
+                  const result = await api.autoDownload(mediaId);
+                  setAutoDownloadResult({ success: result.success, message: result.message });
+                  if (result.success) {
+                    // Give a moment for the user to see the success message
+                    setTimeout(() => onSelect('__auto__'), 500);
+                  }
+                } catch (err) {
+                  setAutoDownloadResult({ success: false, message: 'Auto-download failed' });
+                } finally {
+                  setAutoDownloading(false);
+                }
+              }}
+              disabled={autoDownloading}
+            >
+              {autoDownloading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Zap className="w-4 h-4" />
+              )}
+              {autoDownloading ? 'Finding...' : 'Auto Download'}
+            </button>
+          </div>
+          {autoDownloadResult && (
+            <div className={`mt-2 text-xs flex items-center gap-1.5 ${
+              autoDownloadResult.success ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {autoDownloadResult.success ? (
+                <Settings2 className="w-3 h-3" />
+              ) : (
+                <AlertTriangle className="w-3 h-3" />
+              )}
+              {autoDownloadResult.message}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Search Form */}
       <div className="flex gap-2">

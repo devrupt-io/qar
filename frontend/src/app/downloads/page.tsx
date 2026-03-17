@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
-import { Download, Pause, Play, Trash2, AlertCircle, History, CheckCircle, Clock, Film, Tv, Globe, ExternalLink } from 'lucide-react';
+import { Download, Pause, Play, Trash2, AlertCircle, History, CheckCircle, Clock, Film, Tv, Globe, ExternalLink, Zap } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
 interface DetectedEpisodes {
@@ -26,6 +26,7 @@ interface DownloadItem {
   detectedEpisodes?: DetectedEpisodes;
   downloadReason?: string;
   torrentName?: string;
+  isAutoDownload?: boolean;
   mediaItem: {
     id: string;
     type: string;
@@ -202,6 +203,49 @@ export default function DownloadsPage() {
 
   return (
     <div className="space-y-8">
+      {/* Failed Auto-Downloads Alert */}
+      {(() => {
+        const failedAutoDownloads = historyDownloads.filter(d => d.isAutoDownload && d.status === 'failed');
+        if (failedAutoDownloads.length === 0) return null;
+        return (
+          <section className="bg-red-900/20 border border-red-600/30 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-5 h-5 text-amber-400" />
+              <h2 className="font-semibold text-red-300">Failed Auto-Downloads</h2>
+              <span className="px-2 py-0.5 bg-red-600/30 rounded text-xs text-red-300">
+                {failedAutoDownloads.length}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {failedAutoDownloads.map(download => (
+                <div key={download.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    <div>
+                      <Link
+                        href={`/media/${download.mediaItem.id}`}
+                        className="text-sm font-medium hover:text-primary-400 transition-colors"
+                      >
+                        {getMediaTitle(download.mediaItem, download.detectedEpisodes)}
+                      </Link>
+                      {download.error && (
+                        <p className="text-xs text-red-400 mt-0.5">{download.error}</p>
+                      )}
+                    </div>
+                  </div>
+                  <Link
+                    href={`/media/${download.mediaItem.id}`}
+                    className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                  >
+                    Retry
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
+
       {/* Active Downloads Section */}
       <section>
         <div className="flex items-center gap-3 mb-4">
@@ -248,6 +292,12 @@ export default function DownloadsPage() {
                         {getMediaIcon(download.mediaItem.type)}
                         {download.mediaItem.type}
                       </span>
+                      {download.isAutoDownload && (
+                        <span className="px-2 py-0.5 bg-amber-600/30 text-amber-300 rounded text-xs flex items-center gap-1">
+                          <Zap className="w-3 h-3" />
+                          Auto
+                        </span>
+                      )}
                       {episodesLabel && download.mediaItem.type === 'tv' && (
                         <span className="px-2 py-0.5 bg-primary-600/30 text-primary-300 rounded text-xs">
                           {episodesLabel}
@@ -369,10 +419,14 @@ export default function DownloadsPage() {
             ) : (
               <div className="space-y-2">
                 {historyDownloads.map(download => (
-                  <div key={download.id} className="card bg-slate-800/50 py-3">
+                  <div key={download.id} className={`card bg-slate-800/50 py-3 ${download.status === 'failed' ? 'border-l-2 border-red-500' : ''}`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        {download.status === 'failed' ? (
+                          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                        ) : (
+                          <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                        )}
                         <div>
                           <Link 
                             href={`/media/${download.mediaItem.id}`}
@@ -383,6 +437,12 @@ export default function DownloadsPage() {
                           <p className="text-xs text-slate-500 flex items-center gap-1">
                             {getMediaIcon(download.mediaItem.type)}
                             <span className="capitalize">{download.mediaItem.type}</span>
+                            {download.isAutoDownload && (
+                              <>
+                                <span className="mx-1">•</span>
+                                <span className="text-amber-400 flex items-center gap-0.5"><Zap className="w-3 h-3" />Auto</span>
+                              </>
+                            )}
                             {download.detectedEpisodes && download.mediaItem.type === 'tv' && (
                               <>
                                 <span className="mx-1">•</span>
@@ -396,11 +456,13 @@ export default function DownloadsPage() {
                               </>
                             )}
                             <span className="mx-1">•</span>
-                            <span>Completed {formatDate(download.completedAt)}</span>
+                            <span>{download.status === 'failed' ? 'Failed' : 'Completed'} {formatDate(download.completedAt || download.createdAt)}</span>
                           </p>
                         </div>
                       </div>
-                      <span className="text-sm text-green-400">Completed</span>
+                      <span className={`text-sm ${download.status === 'failed' ? 'text-red-400' : 'text-green-400'}`}>
+                        {download.status === 'failed' ? 'Failed' : 'Completed'}
+                      </span>
                     </div>
                   </div>
                 ))}
