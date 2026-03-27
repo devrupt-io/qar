@@ -18,6 +18,8 @@ interface SettingsData {
   openrouterModel?: string;
   // Auto-download setting
   autoDownloadEnabled?: string;
+  // Episode refresh interval (hours)
+  episodeRefreshIntervalHours?: string;
   // Torrent search preferences (arrays for multi-select)
   preferredCodecs?: string[];
   preferredResolutions?: string[];
@@ -1028,6 +1030,43 @@ function SettingsPageContent() {
                       settings.autoDownloadEnabled !== 'false' ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-6 p-4 bg-slate-700/50 rounded-lg">
+              <h3 className="font-medium mb-2">Episode Refresh</h3>
+              <p className="text-sm text-slate-400 mb-3">
+                Periodically check for new episodes and seasons for active TV shows. Ended shows are checked once and then skipped. Missing episodes between known episodes are automatically filled in.
+              </p>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-slate-300">Check every</label>
+                  <select
+                    value={settings.episodeRefreshIntervalHours || '24'}
+                    onChange={(e) => setSettings({ ...settings, episodeRefreshIntervalHours: e.target.value })}
+                    className="bg-slate-600 text-white rounded px-2 py-1 text-sm"
+                  >
+                    <option value="6">6 hours</option>
+                    <option value="12">12 hours</option>
+                    <option value="24">24 hours</option>
+                    <option value="48">48 hours</option>
+                    <option value="168">Weekly</option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const result = await api.refreshAllShows();
+                      alert(`Refreshed ${result.checked} shows, added ${result.added} episodes.${result.errors?.length ? '\nErrors: ' + result.errors.join(', ') : ''}`);
+                    } catch (err) {
+                      alert('Failed to refresh episodes');
+                    }
+                  }}
+                  className="btn-secondary text-sm py-1 px-3"
+                >
+                  Refresh Now
                 </button>
               </div>
             </div>

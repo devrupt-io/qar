@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { omdbService } from '../services/omdb';
-import { torrentSearchService } from '../services/torrentSearch';
+import { torrentSearchService, TorrentResult } from '../services/torrentSearch';
 import { episodeDetector } from '../services/episodeDetector';
 import { Setting } from '../models';
 import { config } from '../config';
+import { parseQuality, calculateQualityScore } from '../services/torrentQuality';
 
 const router = Router();
 
@@ -51,6 +52,32 @@ async function getSearchPreferences(): Promise<{
     preferredResolutions: parseArraySetting(resolutionsSetting, resolutionSetting, config.defaults.preferredResolutions),
     preferredMovieGroups: parseArraySetting(groupsSetting, groupSetting, config.defaults.preferredMovieGroups),
   };
+}
+
+/**
+ * Score and rank torrent results by user preferences + seeders.
+ * This allows the search query to be broader (fewer filter terms) while
+ * still surfacing the most relevant results at the top.
+ */
+function rankResultsByPreferences(
+  results: TorrentResult[],
+  prefs: { preferredCodecs: string[]; preferredResolutions: string[]; preferredMovieGroups: string[] }
+): TorrentResult[] {
+  const scored = results.map(result => {
+    const quality = result.quality || parseQuality(result.name);
+    const qualityScore = calculateQualityScore(quality, {
+      preferredResolutions: prefs.preferredResolutions,
+      preferredCodecs: prefs.preferredCodecs,
+      preferredGroups: prefs.preferredMovieGroups,
+    });
+    // Seeder bonus: up to +200 for well-seeded torrents
+    const seederBonus = Math.min(result.seeders, 100) * 2;
+    const totalScore = qualityScore + seederBonus;
+    return { ...result, quality, qualityScore: totalScore };
+  });
+
+  scored.sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0));
+  return scored;
 }
 
 // Search for movies and TV shows via OMDB
@@ -135,11 +162,15 @@ router.get('/torrents', async (req, res) => {
         ? (overrideGroup === 'none' || overrideGroup === 'any' ? '' : overrideGroup as string) 
         : (prefs.preferredMovieGroups.length > 0 ? prefs.preferredMovieGroups[0] : '');
       
-      // Add resolution and codec to the search (if not empty)
+      // Add resolution to the search (if not empty)
       if (useResolution && !q.includes(useResolution)) {
         searchQuery += ` ${useResolution}`;
       }
-      if (useCodec && !q.toLowerCase().includes(useCodec.toLowerCase())) {
+      // Only add codec to query when no preferred group is set.
+      // Group-based torrents (e.g. YIFY/YTS) often omit the codec from their
+      // names, so including it in the query filters them out at the search
+      // engine level. We rely on post-search quality scoring instead.
+      if (useCodec && !useGroup && !q.toLowerCase().includes(useCodec.toLowerCase())) {
         searchQuery += ` ${useCodec}`;
       }
       
@@ -211,6 +242,12 @@ router.get('/torrents', async (req, res) => {
     }
     
     console.log(`[API] Torrent search completed: ${searchResponse.results.length} results returned`);
+    
+    // Score and rank results by user preferences + seeders
+    if (searchResponse.results.length > 0 && applyPreferences === 'true') {
+      const prefs = await getSearchPreferences();
+      searchResponse.results = rankResultsByPreferences(searchResponse.results, prefs);
+    }
     
     // Return structured response with search metadata
     res.json({

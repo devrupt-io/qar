@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 /* eslint-disable @next/next/no-img-element */
 import { Sparkles, RefreshCw, Film, Tv, AlertCircle, Plus, Check, Loader2, X } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
 interface Recommendation {
@@ -43,6 +44,7 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
   const [posters, setPosters] = useState<Record<string, string>>({});
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const router = useRouter();
 
   const recKey = (rec: Recommendation) => `${rec.title}-${rec.year}`;
 
@@ -293,7 +295,16 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
           return (
             <div
               key={key}
-              className="bg-slate-800 rounded-lg overflow-hidden relative hover:ring-2 hover:ring-amber-500/50 transition-all group"
+              className="bg-slate-800 rounded-lg overflow-hidden relative hover:ring-2 hover:ring-amber-500/50 transition-all group cursor-pointer"
+              onClick={() => {
+                const params = new URLSearchParams({
+                  title: rec.title,
+                  year: String(rec.year),
+                  type: rec.type,
+                  reason: rec.reason,
+                });
+                router.push(`/recommendation?${params.toString()}`);
+              }}
             >
               {/* Poster */}
               <div className="relative aspect-[2/3] bg-slate-700">
@@ -320,42 +331,18 @@ export default function Recommendations({ onLibraryUpdate }: Props) {
                   {rec.type === 'movie' ? 'Movie' : 'TV Show'}
                 </div>
 
-                {/* Action overlay */}
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <button
-                    onClick={() => handleAdd(rec)}
-                    disabled={busy || status === 'added'}
-                    className={`p-2 rounded-full transition-colors ${
-                      status === 'added'
-                        ? 'bg-green-600 text-white'
-                        : status === 'error'
-                        ? 'bg-red-600 text-white hover:bg-red-500'
-                        : 'bg-primary-600 text-white hover:bg-primary-500'
-                    }`}
-                    title={status === 'added' ? 'Added' : status === 'error' ? 'Retry' : 'Add to library'}
-                  >
-                    {busy ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : status === 'added' ? (
-                      <Check className="w-5 h-5" />
-                    ) : (
-                      <Plus className="w-5 h-5" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleDismiss(rec)}
-                    className="p-2 rounded-full bg-slate-600 text-white hover:bg-red-600 transition-colors"
-                    title="Not interested"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
+                {/* Status indicator */}
+                {status === 'added' && (
+                  <div className="absolute top-2 right-2 p-1 rounded-full bg-green-600">
+                    <Check className="w-3 h-3" />
+                  </div>
+                )}
               </div>
 
               {/* Info */}
               <div className="p-3">
                 <h3 className="font-medium text-sm">{rec.title} ({rec.year})</h3>
-                <p className="text-xs text-slate-400 mt-1">{rec.reason}</p>
+                <p className="text-xs text-slate-400 mt-1 line-clamp-2">{rec.reason}</p>
                 {addError && <p className="text-xs text-red-400 mt-1">{addError}</p>}
               </div>
             </div>

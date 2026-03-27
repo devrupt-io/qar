@@ -328,6 +328,14 @@ function MediaDetailsContent({ id }: { id: string }) {
     }
   };
 
+  const getDownloadUrl = (): string => {
+    if (!media) return '';
+    const backendUrl = typeof window !== 'undefined' 
+      ? `${window.location.protocol}//${window.location.hostname}:3001`
+      : 'http://localhost:3001';
+    return `${backendUrl}/stream/download/${media.id}`;
+  };
+
   const getTitle = (): string => {
     if (!media) return '';
     if (media.type === 'tv' && media.season && media.episode) {
@@ -553,13 +561,13 @@ function MediaDetailsContent({ id }: { id: string }) {
             )}
 
             {/* Primary CTA */}
-            <div className="flex flex-wrap gap-3 mb-6">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-6">
               {media.hasFile ? (
                 <a
                   href={getJellyfinUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-colors w-full sm:w-auto"
                 >
                   <Play className="w-5 h-5" />
                   Watch Now
@@ -569,7 +577,7 @@ function MediaDetailsContent({ id }: { id: string }) {
                   <button
                     onClick={handleAutoDownload}
                     disabled={autoDownloading}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-colors"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-colors w-full sm:w-auto"
                   >
                     {autoDownloading ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
@@ -580,7 +588,7 @@ function MediaDetailsContent({ id }: { id: string }) {
                   </button>
                   <button
                     onClick={() => setShowTorrentSearch(true)}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition-colors"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition-colors w-full sm:w-auto"
                   >
                     <Download className="w-5 h-5" />
                     Choose Torrent
@@ -590,7 +598,7 @@ function MediaDetailsContent({ id }: { id: string }) {
               {media.downloads?.[0] && ['downloading', 'pending', 'paused'].includes(media.downloads[0].status) && (
                 <Link
                   href="/downloads"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition-colors w-full sm:w-auto"
                 >
                   <Download className="w-5 h-5" />
                   View in Downloads
@@ -615,11 +623,11 @@ function MediaDetailsContent({ id }: { id: string }) {
             )}
 
             {/* Secondary Actions */}
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3">
               <button
                 onClick={handlePin}
                 disabled={isPinning}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors w-full sm:w-auto ${
                   media.pinned
                     ? 'bg-yellow-600 hover:bg-yellow-700'
                     : 'bg-slate-700 hover:bg-slate-600'
@@ -639,7 +647,7 @@ function MediaDetailsContent({ id }: { id: string }) {
                 <button
                   onClick={handleDeleteFiles}
                   disabled={isDeleting}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors w-full sm:w-auto"
                   title="Free up disk space by removing downloaded files — the item stays in your library"
                 >
                   {isDeleting ? (
@@ -654,7 +662,7 @@ function MediaDetailsContent({ id }: { id: string }) {
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors w-full sm:w-auto"
                 title="Remove this item from your library entirely"
               >
                 {isDeleting ? (
@@ -670,7 +678,7 @@ function MediaDetailsContent({ id }: { id: string }) {
                   href={`https://www.imdb.com/title/${media.imdbId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors w-full sm:w-auto"
                 >
                   View on IMDb
                 </a>
@@ -679,7 +687,7 @@ function MediaDetailsContent({ id }: { id: string }) {
               {/* Copy Stream URL - useful for external players */}
               <button
                 onClick={copyStreamUrl}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors w-full sm:w-auto"
                 title="Copy stream URL for use in external players like VLC"
               >
                 {copiedUrl ? (
@@ -694,6 +702,18 @@ function MediaDetailsContent({ id }: { id: string }) {
                   </>
                 )}
               </button>
+
+              {/* Download File - direct video file download */}
+              {media.hasFile && (
+                <a
+                  href={getDownloadUrl()}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors w-full sm:w-auto"
+                  title="Download the video file directly"
+                >
+                  <Download className="w-4 h-4" />
+                  Download File
+                </a>
+              )}
             </div>
           </div>
         </div>

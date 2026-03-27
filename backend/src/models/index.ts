@@ -17,6 +17,7 @@ interface MediaItemAttributes {
   title: string;
   year?: number;
   imdbId?: string;
+  imdbRating?: number;
   posterUrl?: string;
   plot?: string;
   season?: number;
@@ -38,6 +39,7 @@ export class MediaItem extends Model<MediaItemAttributes, MediaItemCreationAttri
   public title!: string;
   public year?: number;
   public imdbId?: string;
+  public imdbRating?: number;
   public posterUrl?: string;
   public plot?: string;
   public season?: number;
@@ -71,6 +73,10 @@ MediaItem.init(
     },
     imdbId: {
       type: DataTypes.STRING,
+    },
+    imdbRating: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
     },
     posterUrl: {
       type: DataTypes.STRING,
@@ -298,10 +304,13 @@ interface TVShowAttributes {
   title: string;
   year?: number;
   imdbId?: string;
+  imdbRating?: number;
   posterUrl?: string;
   plot?: string;
   totalSeasons?: number;
   pinned?: boolean;
+  ended?: boolean;
+  lastChecked?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -313,10 +322,13 @@ export class TVShow extends Model<TVShowAttributes, TVShowCreationAttributes> im
   public title!: string;
   public year?: number;
   public imdbId?: string;
+  public imdbRating?: number;
   public posterUrl?: string;
   public plot?: string;
   public totalSeasons?: number;
   public pinned?: boolean;
+  public ended?: boolean;
+  public lastChecked?: Date;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -339,6 +351,10 @@ TVShow.init(
       type: DataTypes.STRING,
       unique: true,
     },
+    imdbRating: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
     posterUrl: {
       type: DataTypes.STRING,
     },
@@ -351,6 +367,13 @@ TVShow.init(
     pinned: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
+    },
+    ended: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    lastChecked: {
+      type: DataTypes.DATE,
     },
   },
   {

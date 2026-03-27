@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Op } from 'sequelize';
 import { MediaItem, Download, TVShow } from '../models';
 import { mediaService } from '../services/media';
 import { qbittorrentService } from '../services/qbittorrent';
@@ -7,6 +8,7 @@ import { omdbService } from '../services/omdb';
 import { downloadManager } from '../services/downloadManager';
 import { jellyfinService } from '../services/jellyfin';
 import { autoDownloadService } from '../services/autoDownload';
+import { episodeRefreshService, EpisodeRefreshService } from '../services/episodeRefresh';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
@@ -281,15 +283,60 @@ router.post('/movie', async (req, res) => {
       return res.status(400).json({ error: 'Title is required' });
     }
 
+    // Check for existing movie to prevent duplicates
+    let existing: MediaItem | null = null;
+    if (imdbId) {
+      existing = await MediaItem.findOne({ where: { type: 'movie', imdbId } });
+    }
+    if (!existing && title) {
+      const where: any = { type: 'movie', title };
+      if (year) where.year = parseInt(year, 10);
+      existing = await MediaItem.findOne({ where });
+    }
+
+    if (existing) {
+      // If a magnet URI was provided, check if there's already an active download
+      if (magnetUri) {
+        const activeDownload = await Download.findOne({
+          where: { mediaItemId: existing.id, status: ['pending', 'downloading', 'paused'] },
+        });
+        if (activeDownload) {
+          return res.json(existing);
+        }
+
+        // Start a new download for the existing item
+        const downloadReason = `Movie: ${existing.title}${existing.year ? ` (${existing.year})` : ''}`;
+        const download = await Download.create({
+          id: uuidv4(),
+          mediaItemId: existing.id,
+          magnetUri,
+          status: 'pending',
+          downloadReason,
+        });
+
+        const hash = await qbittorrentService.addTorrent(magnetUri);
+        if (hash) {
+          await download.update({ torrentHash: hash, status: 'downloading' });
+          const dnMatch = magnetUri.match(/[?&]dn=([^&]+)/);
+          const torrentName = dnMatch ? decodeURIComponent(dnMatch[1].replace(/\+/g, ' ')) : undefined;
+          mediaService.updateMediaMetadata(existing, { magnetUri, torrentHash: hash, torrentName }).catch(() => {});
+        }
+      }
+      return res.json(existing);
+    }
+
     // Get OMDB details if imdbId provided
     let posterUrl: string | undefined;
     let plot: string | undefined;
+    let imdbRating: number | undefined;
     
     if (imdbId) {
       const details = await omdbService.getDetails(imdbId);
       if (details) {
         posterUrl = details.Poster !== 'N/A' ? details.Poster : undefined;
         plot = details.Plot;
+        const rating = parseFloat(details.imdbRating);
+        if (!isNaN(rating)) imdbRating = rating;
       }
     }
 
@@ -300,6 +347,7 @@ router.post('/movie', async (req, res) => {
       title,
       year: year ? parseInt(year, 10) : undefined,
       imdbId,
+      imdbRating,
       posterUrl,
       plot,
       magnetUri,
@@ -348,12 +396,15 @@ router.post('/tv', async (req, res) => {
     // Get OMDB details if imdbId provided
     let posterUrl: string | undefined;
     let plot: string | undefined;
+    let imdbRating: number | undefined;
     
     if (imdbId) {
       const details = await omdbService.getDetails(imdbId);
       if (details) {
         posterUrl = details.Poster !== 'N/A' ? details.Poster : undefined;
         plot = details.Plot;
+        const rating = parseFloat(details.imdbRating);
+        if (!isNaN(rating)) imdbRating = rating;
       }
     }
 
@@ -364,12 +415,20 @@ router.post('/tv', async (req, res) => {
       title,
       year: year ? parseInt(year, 10) : undefined,
       imdbId,
+      imdbRating,
       posterUrl,
       plot,
       season: season ? parseInt(season, 10) : 1,
       episode: episode ? parseInt(episode, 10) : 1,
       magnetUri,
     });
+
+    // Touch the parent TVShow so it sorts as recently updated
+    const parentShow = await TVShow.findOne({ where: { title } });
+    if (parentShow) {
+      await parentShow.changed('updatedAt', true);
+      await parentShow.save();
+    }
 
     // Create .strm and .yml files
     await mediaService.createMediaFiles(media);
@@ -426,6 +485,9 @@ router.post('/tv/show', async (req, res) => {
     const plot = showDetails.Plot;
     const showTitle = title || showDetails.Title;
     const showYear = year ? parseInt(year, 10) : parseInt(showDetails.Year, 10);
+    const isEnded = EpisodeRefreshService.isShowEnded(showDetails.Year);
+    const showRating = parseFloat(showDetails.imdbRating);
+    const imdbRating = !isNaN(showRating) ? showRating : undefined;
 
     // Create or update the TV show entry
     if (!tvShow) {
@@ -434,9 +496,12 @@ router.post('/tv/show', async (req, res) => {
         title: showTitle,
         year: showYear,
         imdbId,
+        imdbRating,
         posterUrl,
         plot,
         totalSeasons,
+        ended: isEnded,
+        lastChecked: new Date(),
       });
       console.log(`Created TV show: ${showTitle} (${showYear})`);
     } else {
@@ -444,9 +509,12 @@ router.post('/tv/show', async (req, res) => {
       await tvShow.update({
         title: showTitle,
         year: showYear,
+        imdbRating,
         posterUrl,
         plot,
         totalSeasons,
+        ended: isEnded,
+        lastChecked: new Date(),
       });
       console.log(`Updated TV show: ${showTitle} (${showYear})`);
     }
@@ -493,6 +561,12 @@ router.post('/tv/show', async (req, res) => {
           await mediaService.createMediaFiles(media);
           createdMedia.push(media);
         }
+
+        // Fill any gaps in episode numbers (e.g., OMDB has E1,E7,E8 → create E2-E6)
+        const gapEpisodes = await episodeRefreshService.fillEpisodeGaps(
+          showTitle, showYear, imdbId, posterUrl, plot, season, seasonDetails.Episodes
+        );
+        createdMedia.push(...gapEpisodes);
       }
     }
 
@@ -508,6 +582,32 @@ router.post('/tv/show', async (req, res) => {
   } catch (error) {
     console.error('Add TV show error:', error);
     res.status(500).json({ error: 'Failed to add TV show' });
+  }
+});
+
+// Refresh episodes for all TV shows (manual trigger)
+router.post('/tv/refresh', async (req, res) => {
+  try {
+    const result = await episodeRefreshService.refreshAll();
+    res.json(result);
+  } catch (error) {
+    console.error('TV refresh error:', error);
+    res.status(500).json({ error: 'Failed to refresh episodes' });
+  }
+});
+
+// Refresh episodes for a single TV show
+router.post('/tv/shows/:id/refresh', async (req, res) => {
+  try {
+    const tvShow = await TVShow.findByPk(req.params.id);
+    if (!tvShow) {
+      return res.status(404).json({ error: 'TV show not found' });
+    }
+    const added = await episodeRefreshService.refreshShow(tvShow);
+    res.json({ show: tvShow.title, added });
+  } catch (error) {
+    console.error('TV show refresh error:', error);
+    res.status(500).json({ error: 'Failed to refresh show' });
   }
 });
 
@@ -706,6 +806,7 @@ router.post('/:id/search-torrents', async (req, res) => {
 
 // Trigger auto-download for a media item
 // Uses the auto-download service to find and start the best torrent automatically
+// Returns immediately and runs search/download in background
 router.post('/:id/auto-download', async (req, res) => {
   const { id } = req.params;
   
@@ -715,24 +816,26 @@ router.post('/:id/auto-download', async (req, res) => {
       return res.status(404).json({ error: 'Media not found' });
     }
     
-    const result = await autoDownloadService.attemptAutoDownload(media);
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        message: result.message,
-        download: result.download,
-        reusingTorrent: result.reusingTorrent || false,
-      });
-    } else {
-      res.json({
-        success: false,
-        message: result.message,
-      });
-    }
+    // Return immediately - search runs in background
+    res.json({
+      success: true,
+      message: 'Auto-download search started',
+      searching: true,
+    });
+
+    // Run auto-download in background
+    autoDownloadService.attemptAutoDownload(media).then(result => {
+      if (result.success) {
+        console.log(`[Auto-download] ${media.title}: ${result.message}`);
+      } else {
+        console.log(`[Auto-download] ${media.title} failed: ${result.message}`);
+      }
+    }).catch(error => {
+      console.error(`[Auto-download] ${media.title} error:`, error);
+    });
   } catch (error) {
     console.error('Auto-download error:', error);
-    res.status(500).json({ error: 'Failed to auto-download' });
+    res.status(500).json({ error: 'Failed to start auto-download' });
   }
 });
 
@@ -1263,6 +1366,71 @@ router.post('/migrate-tv-episodes', async (req, res) => {
   } catch (error) {
     console.error('TV migration error:', error);
     res.status(500).json({ error: 'Failed to migrate TV episodes' });
+  }
+});
+
+// Backfill IMDB ratings for existing media items and TV shows
+router.post('/backfill-ratings', async (req, res) => {
+  try {
+    console.log('Starting IMDB rating backfill...');
+    let updatedMovies = 0;
+    let updatedShows = 0;
+
+    // Backfill movies (MediaItems with imdbId but no imdbRating)
+    const movies = await MediaItem.findAll({
+      where: {
+        imdbId: { [Op.ne]: null as any },
+        imdbRating: null as any,
+      },
+    });
+
+    for (const movie of movies) {
+      try {
+        const details = await omdbService.getDetails(movie.imdbId!);
+        if (details) {
+          const rating = parseFloat(details.imdbRating);
+          if (!isNaN(rating)) {
+            await movie.update({ imdbRating: rating });
+            updatedMovies++;
+          }
+        }
+      } catch (e) {
+        console.error(`Failed to backfill rating for ${movie.title}:`, e);
+      }
+    }
+
+    // Backfill TV shows
+    const shows = await TVShow.findAll({
+      where: {
+        imdbId: { [Op.ne]: null as any },
+        imdbRating: null as any,
+      },
+    });
+
+    for (const show of shows) {
+      try {
+        const details = await omdbService.getDetails(show.imdbId!);
+        if (details) {
+          const rating = parseFloat(details.imdbRating);
+          if (!isNaN(rating)) {
+            await show.update({ imdbRating: rating });
+            updatedShows++;
+          }
+        }
+      } catch (e) {
+        console.error(`Failed to backfill rating for ${show.title}:`, e);
+      }
+    }
+
+    res.json({
+      success: true,
+      updatedMovies,
+      updatedShows,
+      total: updatedMovies + updatedShows,
+    });
+  } catch (error) {
+    console.error('Rating backfill error:', error);
+    res.status(500).json({ error: 'Failed to backfill ratings' });
   }
 });
 

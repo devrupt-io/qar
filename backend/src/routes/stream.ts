@@ -163,6 +163,37 @@ router.get('/web/:title', async (req, res) => {
   res.redirect(307, `/progress/web/${title}`);
 });
 
+// Download file by ID: /stream/download/:id
+router.get('/download/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  const media = await MediaItem.findByPk(id);
+  if (!media) {
+    return res.status(404).json({ error: 'Media not found' });
+  }
+  
+  const filePath = await mediaService.getMediaFilePath(media);
+  if (!filePath) {
+    return res.status(404).json({ error: 'File not available for download' });
+  }
+
+  try {
+    const stat = await fs.promises.stat(filePath);
+    const fileName = path.basename(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = ext === '.mkv' ? 'video/x-matroska' : 'video/mp4';
+
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', stat.size);
+
+    const stream = fs.createReadStream(filePath);
+    stream.pipe(res);
+  } catch {
+    return res.status(404).json({ error: 'File not found on disk' });
+  }
+});
+
 // Stream by ID: /stream/:id
 router.get('/:id', async (req, res) => {
   const { id } = req.params;

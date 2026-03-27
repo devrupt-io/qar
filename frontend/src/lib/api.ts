@@ -140,6 +140,16 @@ export const api = {
     return fetchApi('/media/tv/shows');
   },
 
+  // Refresh episodes for all TV shows
+  refreshAllShows: () => {
+    return fetchApi('/media/tv/refresh', { method: 'POST' });
+  },
+
+  // Refresh episodes for a single TV show
+  refreshShow: (id: string) => {
+    return fetchApi(`/media/tv/shows/${id}/refresh`, { method: 'POST' });
+  },
+
   // Migrate orphaned TV episodes into TVShow entities
   migrateTvEpisodes: () => {
     return fetchApi('/media/migrate-tv-episodes', {

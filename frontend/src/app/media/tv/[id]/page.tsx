@@ -91,11 +91,8 @@ function TVShowDetailsContent({ id }: { id: string }) {
       const data = await api.getTvShow(id);
       setShow(data);
       
-      // Expand all seasons by default
-      if (data.episodes) {
-        const seasons = new Set<number>(data.episodes.map((ep: Episode) => ep.season));
-        setExpandedSeasons(seasons);
-      }
+      // Start with all seasons collapsed
+      setExpandedSeasons(new Set());
     } catch (err: any) {
       console.error('API error:', err);
       setError(err.message || 'Failed to load TV show details');
@@ -647,7 +644,15 @@ function TVShowDetailsContent({ id }: { id: string }) {
                                   <FileX className="w-4 h-4" />
                                 </button>
                               </>
-                            ) : !isDownloading ? (
+                            ) : isDownloading ? (
+                              <Link
+                                href="/downloads"
+                                className="text-sm py-1 px-3 flex items-center gap-1 text-amber-400 hover:text-amber-300"
+                              >
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Downloading...
+                              </Link>
+                            ) : (
                               <button
                                 onClick={() => openDownloadModal('episode', episode.season, episode)}
                                 className="btn-secondary text-sm py-1 px-3 flex items-center gap-1"
@@ -655,7 +660,7 @@ function TVShowDetailsContent({ id }: { id: string }) {
                                 <Download className="w-4 h-4" />
                                 Download
                               </button>
-                            ) : null}
+                            )}
                           </div>
                         </div>
                       );

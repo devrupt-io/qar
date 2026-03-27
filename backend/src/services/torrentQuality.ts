@@ -258,13 +258,14 @@ export function calculateQualityScore(
     score += 5;
   }
 
-  // Bonus for matching release group
+  // Bonus for matching release group - strongest preference signal since
+  // users explicitly choose their preferred release group
   if (quality.releaseGroup && prefGroups.length > 0) {
     const matchesGroup = prefGroups.some(pref => 
       quality.releaseGroup === pref.toLowerCase()
     );
     if (matchesGroup) {
-      score += 30;
+      score += 80;
     }
   }
 

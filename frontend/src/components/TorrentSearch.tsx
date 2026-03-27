@@ -438,10 +438,33 @@ export default function TorrentSearch({
                 setAutoDownloadResult(null);
                 try {
                   const result = await api.autoDownload(mediaId);
-                  setAutoDownloadResult({ success: result.success, message: result.message });
-                  if (result.success) {
-                    // Give a moment for the user to see the success message
+                  if (result.searching) {
+                    // Backend returns immediately; poll for download to appear
+                    setAutoDownloadResult({ success: true, message: 'Searching for best torrent...' });
+                    let found = false;
+                    for (let i = 0; i < 30; i++) {
+                      await new Promise(r => setTimeout(r, 2000));
+                      try {
+                        const downloads = await api.getDownloads();
+                        const dl = downloads.find((d: { mediaItemId: string; status: string }) => d.mediaItemId === mediaId && ['pending', 'downloading'].includes(d.status));
+                        if (dl) {
+                          found = true;
+                          setAutoDownloadResult({ success: true, message: 'Download started!' });
+                          setTimeout(() => onSelect('__auto__'), 500);
+                          break;
+                        }
+                      } catch {
+                        // Continue polling
+                      }
+                    }
+                    if (!found) {
+                      setAutoDownloadResult({ success: false, message: 'No suitable torrent found' });
+                    }
+                  } else if (result.success) {
+                    setAutoDownloadResult({ success: true, message: result.message });
                     setTimeout(() => onSelect('__auto__'), 500);
+                  } else {
+                    setAutoDownloadResult({ success: false, message: result.message });
                   }
                 } catch (err) {
                   setAutoDownloadResult({ success: false, message: 'Auto-download failed' });

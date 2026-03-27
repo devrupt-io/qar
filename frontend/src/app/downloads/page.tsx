@@ -420,21 +420,21 @@ export default function DownloadsPage() {
               <div className="space-y-2">
                 {historyDownloads.map(download => (
                   <div key={download.id} className={`card bg-slate-800/50 py-3 ${download.status === 'failed' ? 'border-l-2 border-red-500' : ''}`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         {download.status === 'failed' ? (
                           <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
                         ) : (
                           <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
                         )}
-                        <div>
+                        <div className="min-w-0">
                           <Link 
                             href={`/media/${download.mediaItem.id}`}
-                            className="font-medium hover:text-primary-400 transition-colors"
+                            className="font-medium hover:text-primary-400 transition-colors block truncate"
                           >
                             {getMediaTitle(download.mediaItem, download.detectedEpisodes)}
                           </Link>
-                          <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <p className="text-xs text-slate-500 flex flex-wrap items-center gap-1">
                             {getMediaIcon(download.mediaItem.type)}
                             <span className="capitalize">{download.mediaItem.type}</span>
                             {download.isAutoDownload && (
@@ -446,21 +446,21 @@ export default function DownloadsPage() {
                             {download.detectedEpisodes && download.mediaItem.type === 'tv' && (
                               <>
                                 <span className="mx-1">•</span>
-                                <span className="text-primary-400">{getDetectedEpisodesLabel(download.detectedEpisodes)}</span>
+                                <span className="text-primary-400 truncate max-w-[200px]">{getDetectedEpisodesLabel(download.detectedEpisodes)}</span>
                               </>
                             )}
                             {download.downloadReason && (
                               <>
                                 <span className="mx-1">•</span>
-                                <span title="Download reason">{download.downloadReason}</span>
+                                <span className="truncate max-w-[150px]" title={download.downloadReason}>{download.downloadReason}</span>
                               </>
                             )}
                             <span className="mx-1">•</span>
-                            <span>{download.status === 'failed' ? 'Failed' : 'Completed'} {formatDate(download.completedAt || download.createdAt)}</span>
+                            <span className="whitespace-nowrap">{download.status === 'failed' ? 'Failed' : 'Completed'} {formatDate(download.completedAt || download.createdAt)}</span>
                           </p>
                         </div>
                       </div>
-                      <span className={`text-sm ${download.status === 'failed' ? 'text-red-400' : 'text-green-400'}`}>
+                      <span className={`text-sm flex-shrink-0 ${download.status === 'failed' ? 'text-red-400' : 'text-green-400'}`}>
                         {download.status === 'failed' ? 'Failed' : 'Completed'}
                       </span>
                     </div>

@@ -1260,39 +1260,25 @@ class DownloadManager {
           return false;
         }
 
+        // Check all known headers regardless of extension (torrents often mislabel formats)
+        const isEBML = buffer[0] === 0x1A && buffer[1] === 0x45 && 
+                       buffer[2] === 0xDF && buffer[3] === 0xA3;
+        const hasFtyp = buffer.slice(4, 8).toString('ascii') === 'ftyp';
+        const isRIFF = buffer.slice(0, 4).toString('ascii') === 'RIFF';
+        const isAVI = isRIFF && buffer.slice(8, 12).toString('ascii') === 'AVI ';
+
+        if (isEBML || hasFtyp || isAVI) {
+          return true;
+        }
+
         const ext = path.extname(filePath).toLowerCase();
-
-        // MKV/WebM: EBML header starts with 0x1A 0x45 0xDF 0xA3
-        if (ext === '.mkv' || ext === '.webm') {
-          const isEBML = buffer[0] === 0x1A && buffer[1] === 0x45 && 
-                         buffer[2] === 0xDF && buffer[3] === 0xA3;
-          if (!isEBML) {
-            console.log(`Invalid MKV/WebM header: ${filePath} (got: ${buffer.slice(0, 4).toString('hex')})`);
-          }
-          return isEBML;
+        const knownExts = ['.mkv', '.webm', '.mp4', '.mov', '.avi'];
+        if (knownExts.includes(ext)) {
+          console.log(`No recognized media header for ${filePath} (first bytes: ${buffer.slice(0, 8).toString('hex')})`);
+          return false;
         }
 
-        // MP4/MOV: 'ftyp' at offset 4
-        if (ext === '.mp4' || ext === '.mov') {
-          const hasFtyp = buffer.slice(4, 8).toString('ascii') === 'ftyp';
-          if (!hasFtyp) {
-            console.log(`Invalid MP4/MOV header: ${filePath} (got: ${buffer.slice(4, 8).toString('hex')})`);
-          }
-          return hasFtyp;
-        }
-
-        // AVI: 'RIFF' followed by 'AVI ' at offset 8
-        if (ext === '.avi') {
-          const isRIFF = buffer.slice(0, 4).toString('ascii') === 'RIFF';
-          const isAVI = buffer.slice(8, 12).toString('ascii') === 'AVI ';
-          if (!isRIFF || !isAVI) {
-            console.log(`Invalid AVI header: ${filePath}`);
-          }
-          return isRIFF && isAVI;
-        }
-
-        // WMV/FLV: Just check for non-zero content
-        // These formats have variable headers, so we just ensure it's not empty
+        // WMV/FLV/other: Just check for non-zero content
         console.log(`Assuming valid (non-zero header) for ${ext}: ${filePath}`);
         return true;
       } finally {

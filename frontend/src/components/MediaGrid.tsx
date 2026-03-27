@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Film, Tv, Globe, Pin } from 'lucide-react';
+import { Film, Tv, Globe, Pin, Star } from 'lucide-react';
 import { getMediaStatus, getTvShowStatus } from '@/lib/mediaStatus';
 
 interface MediaItem {
@@ -21,6 +21,7 @@ interface MediaItem {
   diskPath?: string;
   hasFile?: boolean;
   pinned?: boolean;
+  imdbRating?: number;
   downloads?: Array<{ status: string; progress: number; completedAt?: string }>;
   // TV show specific fields
   totalEpisodes?: number;
@@ -174,6 +175,14 @@ export default function MediaGrid({ items }: Props) {
                   <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium ${status.color}`}>
                     {status.label}
                   </div>
+
+                  {/* IMDB Rating Badge */}
+                  {item.imdbRating && (
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-yellow-400 text-xs font-medium">
+                      <Star className="w-3 h-3 fill-yellow-400" />
+                      {item.imdbRating.toFixed(1)}
+                    </div>
+                  )}
 
                 </div>
               </Link>

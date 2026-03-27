@@ -23,6 +23,7 @@ import recommendationsRoutes from './routes/recommendations';
 import { contentScannerService } from './services/contentScanner';
 import { openRouterService } from './services/ai';
 import { mediaService } from './services/media';
+import { episodeRefreshService } from './services/episodeRefresh';
 
 const app = express();
 
@@ -259,6 +260,9 @@ async function start() {
     // Start the content scanner (scans every hour, rate-limited to 100 items/hour)
     // This recovers media from existing content/ and storage/ directories
     contentScannerService.start(60 * 60 * 1000);
+
+    // Start periodic episode refresh (checks active shows for new episodes)
+    episodeRefreshService.start();
     
     // Validate file paths on startup - clears stale entries where files were deleted
     mediaService.validateFilePaths().catch(err => {
