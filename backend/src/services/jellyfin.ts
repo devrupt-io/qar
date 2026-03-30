@@ -84,7 +84,7 @@ export class JellyfinService {
   
   // Client identification for Jellyfin API
   private readonly CLIENT_NAME = 'Qar';
-  private readonly CLIENT_VERSION = '1.0.0';
+  private readonly CLIENT_VERSION = '1.0.1';
   private readonly DEVICE_NAME = 'Qar Backend';
   private readonly DEVICE_ID = 'qar-backend-001';
 

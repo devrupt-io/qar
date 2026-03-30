@@ -30,14 +30,14 @@ sudo apt install qar
 Or install directly from a `.deb` file:
 
 ```bash
-sudo dpkg -i qar_1.0.0_amd64.deb
+sudo dpkg -i qar_1.0.1_amd64.deb
 sudo apt-get install -f    # Resolve dependencies
 ```
 
 ### Install on RHEL / Fedora
 
 ```bash
-sudo rpm -i qar-1.0.0.x86_64.rpm
+sudo rpm -i qar-1.0.1.x86_64.rpm
 ```
 
 ### Configure

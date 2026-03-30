@@ -35,6 +35,20 @@ command -v nfpm  >/dev/null 2>&1 || error "nfpm is required (https://nfpm.gorele
 
 info "Building Qar v${VERSION}"
 
+# ── Sync version into package.json files ─────────────────────────────────────
+info "Syncing version to package.json files..."
+cd "$PROJECT_ROOT"
+for pkg in backend/package.json frontend/package.json; do
+  if [ -f "$pkg" ]; then
+    node -e "
+      const fs = require('fs');
+      const p = JSON.parse(fs.readFileSync('$pkg','utf8'));
+      p.version = '$VERSION';
+      fs.writeFileSync('$pkg', JSON.stringify(p, null, 2) + '\n');
+    "
+  fi
+done
+
 # ── Clean previous build ────────────────────────────────────────────────────
 info "Cleaning previous build artifacts..."
 rm -rf "$DIST_DIR"
