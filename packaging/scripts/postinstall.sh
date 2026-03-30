@@ -39,10 +39,11 @@ elif [ "$1" -ge 2 ] 2>/dev/null; then
   systemctl restart qar-backend.service 2>/dev/null || true
   systemctl restart qar-frontend.service 2>/dev/null || true
 else
-  # Fresh install: start services automatically (non-blocking to not hang dpkg)
+  # Fresh install: start core services, VPN/qbittorrent are non-blocking
+  # (VPN may hang if PIA credentials aren't configured yet)
   echo "Starting Qar services..."
-  systemctl start qar-backend.service --no-block 2>/dev/null || true
-  systemctl start qar-frontend.service --no-block 2>/dev/null || true
+  systemctl start qar-backend.service 2>/dev/null || true
+  systemctl start qar-frontend.service 2>/dev/null || true
   systemctl start qar-vpn.service --no-block 2>/dev/null || true
   systemctl start qar-qbittorrent.service --no-block 2>/dev/null || true
 fi

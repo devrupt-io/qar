@@ -1,8 +1,8 @@
 [Unit]
 Description=Qar Media System - Backend
 Documentation=https://github.com/devrupt-io/qar
-After=network.target qar-qbittorrent.service
-Wants=qar-frontend.service qar-qbittorrent.service
+After=network.target
+Wants=qar-frontend.service
 
 [Service]
 Type=simple
