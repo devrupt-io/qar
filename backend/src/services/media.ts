@@ -782,7 +782,7 @@ export class MediaService {
       
       // Convert the disk path (as backend sees it) to a Jellyfin-accessible path
       // Backend sees: /qar/disks/<disk>/movies/... 
-      // Jellyfin sees: /storage/<disk>/movies/... (via docker mount /qar/disks:/storage:ro)
+      // Jellyfin sees: /storage/<disk>/movies/... (via mount or docker volume)
       let jellyfinPath: string;
       
       // Check if the file is in the disks directory

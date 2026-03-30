@@ -82,7 +82,7 @@ export class QBittorrentService {
           if (typeof responseData === 'string' && responseData.includes('banned')) {
             if (!this.isBanned) {
               console.warn('QBittorrent: IP is banned due to too many failed authentication attempts');
-              console.warn('QBittorrent: The ban will typically expire in 1 hour, or restart the container');
+              console.warn('QBittorrent: The ban will typically expire in 1 hour, or restart the service');
             }
             this.isBanned = true;
             this.banResetTime = now + 3600000; // Ban typically lasts 1 hour
@@ -103,7 +103,7 @@ export class QBittorrentService {
       
       // Only log on transition from available to unavailable, or first check
       if (this.available !== false) {
-        console.warn('QBittorrent is not available (VPN may not be configured or container not running)');
+        console.warn('QBittorrent is not available (VPN may not be configured or service not running)');
       }
       this.available = false;
       this.lastAvailabilityCheck = now;

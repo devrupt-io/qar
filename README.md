@@ -1,57 +1,111 @@
 # Qar
 
-Qar is a simple to use all-in-one self-hosted media system.
+**Qar** is a self-hosted, all-in-one media management system for Linux. It provides an easy-to-use web interface for discovering, downloading, and streaming Movies, TV shows, and Web content — all with built-in VPN protection for privacy.
 
-Under the hood:
+## Features
 
-- Linux: The underlying operating system that provides networking, disks,
-  docker, etc.
-- Jellyfin: Provides a media server that arranges Movies, TV, and Web content
-  into a UI similar to streaming services.
-- QBittorrent: A BitTorrent client that uses a VPN.
-- Frontend: A Next.js frontend that allows users to easily add TV and movies to
-  their collection. 
-- Backend: An Express TypeScript backend that uses Sequelize and PostgreSQL to
-  store data, orchestrate downloads, and serves media files.
+- 🎬 **One-click media discovery** — Search for movies and TV shows by name, powered by OMDB
+- 📺 **Jellyfin integration** — Automatically configured media server with zero manual setup
+- 🔒 **VPN-protected downloads** — QBittorrent runs inside an isolated WireGuard VPN namespace (PIA)
+- 🌐 **Tor-routed search** — Torrent searches go through Tor for privacy, with clearnet fallback
+- 📦 **Smart downloads** — Automatic quality selection, per-episode priority, incremental processing
+- 💾 **Multi-disk support** — Span your library across multiple drives with automatic allocation
+- 🔄 **Content recovery** — Scan and rebuild your library from existing files on disk
+- 📱 **Progress videos** — See live download progress inside Jellyfin while content downloads
 
-## System design
+## Quick Start
 
-Qar is installed on a Linux system that is already running Docker. Most of it
-runs within a docker stack, except for a small host helper script.
+### Install on Debian / Ubuntu
 
-### Storage Configuration
+```bash
+sudo dpkg -i qar_1.0.0_amd64.deb
+sudo apt-get install -f    # Resolve dependencies (Jellyfin, QBittorrent, etc.)
+```
 
-Qar supports two types of storage:
+### Install on RHEL / Fedora
 
-1. **External Disks**: The Linux system may have multiple different disks,
-   which are available on the host system as `/qar/disks/x` and `/qar/disks/y`.
-   Each disk is a different large hard drive (2TB) that has directories for
-   `tv`, `movies`, and `web`.
+```bash
+sudo rpm -i qar-1.0.0.x86_64.rpm
+```
 
-2. **Default Storage**: A local `./storage` directory that serves as a fallback
-   when no external disks are configured. This is useful for testing or small
-   installations. The default storage is automatically used if no external disks
-   are found in `/qar/disks`.
+### Configure
 
-3. **Downloads Volume**: A shared Docker volume (`qbittorrent_downloads`) is
-   used for active downloads. QBittorrent saves to `/downloads` inside its
-   container, which maps to the same volume that the backend accesses at
-   `/qar/downloads`. This shared volume allows the backend to access
-   downloaded files for processing and moving to storage.
+Edit `/etc/qar/qar.conf` to set your API keys and preferences:
 
-For TV shows the structure is `tv/<name>/Season <n>/*.(mp4|mkv)`.
+```bash
+sudo nano /etc/qar/qar.conf
+```
 
-For Movies the structure is `movies/<name> (<year>)/*.(mp4|mkv)`.
+Key settings:
 
-For Web the structure is `web/<channel>/*.(mp4|mkv)`.
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `DB_DIALECT` | `sqlite` | Database engine (`sqlite` or `postgres`) |
+| `OMDB_API_KEY` | *(empty)* | [OMDB API key](https://www.omdbapi.com/apikey.aspx) for movie/TV metadata |
+| `JELLYFIN_URL` | `http://127.0.0.1:8096` | Jellyfin server URL |
+| `QBITTORRENT_URL` | `http://127.0.0.1:8888` | QBittorrent WebUI URL |
+| `CONTENT_PATH` | `/qar/content` | Directory for `.strm` and metadata files |
+| `DOWNLOADS_PATH` | `/qar/downloads` | Active download directory |
 
-There must be a script on the host system that ensures that disks are mounted
-correctly, docker volumes are running, etc.
+### Start
 
-The Jellyfin content is stored in a single directory `/qar/content` which stores
-the same `tv`, `movies`, and `web` directories, except these store `.strm` files
-that contact the backend server, which handles download and streaming of
-content. These are designed to be easy to backup or share.
+```bash
+sudo systemctl start qar-backend
+```
+
+This automatically starts all dependent services (frontend, QBittorrent, VPN). Open your browser to **http://localhost:3000** to get started.
+
+### Verify
+
+```bash
+sudo systemctl status qar-backend qar-frontend qar-vpn qar-qbittorrent jellyfin
+```
+
+## Architecture
+
+Qar is composed of five services managed by systemd:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `qar-frontend` | 3000 | Next.js web interface |
+| `qar-backend` | 3001 | Express API server (TypeScript + Sequelize) |
+| `jellyfin` | 8096 | Media streaming server (auto-configured) |
+| `qar-qbittorrent` | 8888 | Torrent client (runs inside VPN namespace) |
+| `qar-vpn` | — | WireGuard VPN namespace manager (PIA) |
+
+### How It Works
+
+1. **You search** for a movie or TV show in the web UI
+2. **Qar finds** matching content via OMDB and torrent sources (via Tor)
+3. **QBittorrent downloads** the content through an encrypted VPN tunnel
+4. **Files are organized** into your library across your storage disks
+5. **Jellyfin serves** the content for playback on any device
+
+### Storage Layout
+
+```
+/qar/
+├── content/          # .strm and .yml metadata files (lightweight, shareable)
+│   ├── movies/
+│   ├── tv/
+│   └── web/
+├── downloads/        # Active QBittorrent downloads (temporary)
+├── disks/            # External storage drives (optional)
+│   ├── default/      # Default storage if no external disks
+│   ├── disk1/        # External drive mount points
+│   └── disk2/
+├── config/           # Service configuration files
+│   └── qBittorrent/  # QBittorrent settings
+└── data/
+    └── qar.db        # SQLite database (default)
+```
+
+Media files are stored in the `disks/` directory. The `content/` directory contains only lightweight `.strm` files that point to actual media — making it easy to back up or share your library.
+
+**File structure:**
+- Movies: `disks/<disk>/movies/<Title> (<Year>)/<file>.mkv`
+- TV: `disks/<disk>/tv/<Show>/Season <N>/<file>.mkv`
+- Web: `disks/<disk>/web/<Channel>/<file>.mkv`
 
 ### Content Recovery and Scanning
 
@@ -132,11 +186,9 @@ approach:
 
 Progress video URLs follow a consistent, human-readable format:
 
-- **Movies**: `http://backend:3001/progress/movies/{title-slug}/{year}`
-  - Example: `http://backend:3001/progress/movies/the+matrix/1999`
-- **TV Shows**: `http://backend:3001/progress/tv/{title-slug}/s{season}e{episode}`
-  - Example: `http://backend:3001/progress/tv/stranger+things/s01e01`
-- **Web**: `http://backend:3001/progress/web/{title-slug}`
+- **Movies**: `http://localhost:3001/progress/movies/{title-slug}/{year}`
+- **TV Shows**: `http://localhost:3001/progress/tv/{title-slug}/s{season}e{episode}`
+- **Web**: `http://localhost:3001/progress/web/{title-slug}`
 
 The slug is created by converting the title to lowercase and replacing
 non-alphanumeric characters with `+`.
@@ -149,12 +201,7 @@ at 1280x720 resolution and minimal CPU usage (1fps, static image encoding).
 Once a download completes and the file is moved to storage, the `.strm` file is
 automatically updated to contain a direct path to the video file:
 
-- Example: `/storage/movies/The Matrix (1999)/The Matrix (1999).mkv`
-
-This path points to Jellyfin's `/storage` mount, which maps to `./storage` on
-the host. This is where actual video files are stored after download.
-
-Direct paths allow Jellyfin to:
+Direct paths point to Jellyfin's storage mount, allowing it to:
 - Analyze the file format and codecs
 - Enable direct play without transcoding
 - Provide faster seeking and better playback performance
@@ -164,8 +211,8 @@ library refresh for that specific item so the change takes effect immediately.
 
 #### Storage Architecture
 
-- `./content` → Jellyfin `/media` (read-only): Contains `.strm` and `.yml` metadata files
-- `./storage` → Jellyfin `/storage` (read-only): Contains actual video files after download
+- `content/` → Jellyfin content library: Contains `.strm` and `.yml` metadata files
+- `disks/` → Jellyfin storage library: Contains actual video files after download
 
 This separation allows `.strm` files to be lightweight and easily shared, while
 video files are stored separately in the storage directory.
@@ -222,13 +269,46 @@ Next to each `.strm` file there may also be a YAML file that stores metadata
 about what Magnet links to use for download. The goal is that a large library of
 these `.strm` and `.yml` files can be stored and shared.
 
+## VPN Protection
+
+Qar runs QBittorrent inside an isolated Linux network namespace with a WireGuard tunnel to PIA (Private Internet Access). This ensures **all torrent traffic** is encrypted and routed through the VPN — with a kill switch that blocks traffic if the VPN disconnects.
+
+### How VPN Isolation Works
+
+```
+Host Network                    VPN Namespace (qarvpn)
+┌─────────────┐    veth pair    ┌──────────────────────┐
+│  Frontend    │◄──────────────►│  QBittorrent :8888   │
+│  Backend     │   10.200.200.x │  WireGuard tunnel    │──► PIA VPN
+│  Jellyfin    │                │  (kill switch active) │
+│  socat :8888 │                └──────────────────────┘
+└─────────────┘
+```
+
+- The `qar-vpn` service creates a network namespace, establishes a WireGuard tunnel, and runs `socat` to forward port 8888 from the host into the namespace
+- The `qar-qbittorrent` service runs inside the namespace — it can only reach the internet through the VPN
+- If the VPN disconnects, the namespace has no default route, so traffic is blocked (kill switch)
+
+### Configuring VPN Credentials
+
+1. Open the Qar web UI at **http://localhost:3000/settings**
+2. Enter your PIA VPN username and password
+3. Select a VPN region
+4. Click **Apply VPN Settings** — the VPN and QBittorrent services restart automatically
+
+You can verify isolation by comparing IPs:
+
+```bash
+# Host IP (your real IP)
+curl -s ifconfig.me
+
+# VPN namespace IP (should be different)
+sudo ip netns exec qarvpn curl -s ifconfig.me
+```
+
 ## Docker Services
 
-The system must use a `docker-compose.yml` file.
-
-The docker services need to expose Jellyfin on the default port.
-
-The QBittorrent service must use a VPN, something like:
+Qar uses a `docker-compose.yml` for development and testing. The Docker stack mirrors the native Linux services:
 
 ```yaml
 services:
@@ -253,94 +333,26 @@ services:
         restart: unless-stopped
 ```
 
-The `./config/.env` file is managed by the backend and contains:
-- `USER`: PIA VPN username
-- `PASSWORD`: PIA VPN password  
-- `REGION`: VPN region (e.g., Netherlands)
+The `./config/.env` file is managed by the backend and contains VPN credentials
+(`USER`, `PASSWORD`, `REGION`). These are configured through the web interface at
+**http://localhost:3000/settings**.
 
-However, the user must be able to configure their VPN username and password
-within the web interface.
+> **Note**: The Docker stack uses the [j4ym0/pia-qbittorrent](https://hub.docker.com/r/j4ym0/pia-qbittorrent) image which handles VPN tunneling internally. The `config/post-vpn-connect.sh` hook script configures Docker-specific routing and authentication bypass. For native installs, the `qar-vpn` service handles this automatically.
 
-### Docker Network Routing Fix
+## Backend
 
-The j4ym0/pia-qbittorrent container uses policy-based routing to ensure all
-traffic goes through the VPN. This creates a routing table (table 128) that
-doesn't include a direct route for the Docker network subnet, causing
-container-to-container communication to fail.
+The backend is written in TypeScript using Express and Sequelize. It supports
+both SQLite (default for native installs) and PostgreSQL (used in Docker).
 
-The `config/post-vpn-connect.sh` hook script fixes this by adding the Docker
-subnet route to table 128 after the VPN connects.
+Tor is installed for private torrent searches via hidden service (.onion),
+with automatic fallback to clearnet mirrors.
 
-### QBittorrent Authentication
-
-The j4ym0/pia-qbittorrent container generates a new random WebUI password each
-time it starts, which makes traditional username/password authentication
-problematic for the backend service.
-
-**Solution**: The `config/post-vpn-connect.sh` hook script configures
-QBittorrent's WebUI to bypass authentication for Docker network subnets. This
-allows the backend to communicate with QBittorrent without needing to know the
-WebUI password.
-
-The hook script sets the following in `/config/qBittorrent/config/qBittorrent.conf`:
-
-```ini
-[Preferences]
-WebUI\AuthSubnetWhitelistEnabled=true
-WebUI\AuthSubnetWhitelist=172.16.0.0/12, 10.0.0.0/8, 192.168.0.0/16
-```
-
-This configuration whitelists all common Docker network ranges:
-- `172.16.0.0/12` - Docker's default bridge networks
-- `10.0.0.0/8` - Alternative private network range
-- `192.168.0.0/16` - Host network and some custom configurations
-
-The backend automatically detects when authentication bypass is available and
-uses it instead of attempting password-based login. This prevents IP bans that
-could occur from repeated failed login attempts.
-
-### VPN Configuration Flow
-
-The VPN configuration process works as follows:
-
-1. **User enters credentials**: The user enters their PIA VPN username and
-   password in the Settings page of the Qar web interface.
-
-2. **Credentials are saved**: When the user clicks "Save Settings", the
-   credentials are stored in the PostgreSQL database and also synced to the
-   `./config/.env` file.
-
-3. **Container restart required**: The QBittorrent container reads VPN
-   credentials from environment variables at startup. After saving new
-   credentials, the container must be restarted to pick up the changes:
-   ```bash
-   docker compose up -d pia-qbittorrent
-   ```
-
-4. **Status verification**: The Settings page shows the current VPN status:
-   - **Not Configured**: No VPN credentials have been entered
-   - **Starting...**: Credentials are configured but QBittorrent is not yet
-     responding (container may be starting or connecting to VPN)
-   - **Connected**: QBittorrent is available and working
-
-The system differentiates between "credentials not configured" and "credentials
-configured but service not available" to provide helpful guidance to users.
-
-## Backend design
-
-The backend must be written in TypeScript, Express, and Sequelize for talking to
-the PostgreSQL database.
-
-The backend must have Tor installed because some services must be accessed via
-Tor, such as 1337x.
-
-The backend server must automate searching for Movies and TV via the OMDb API.
-This information is reported back to the frontend so the user can select which
-movie or TV show they are looking for, seasons, etc.
+The backend automates media search via the OMDB API, enabling users to find and
+add movies and TV shows through the web interface.
 
 ### Torrent Search
 
-The torrent search functionality connects to 1337x to find download sources:
+The torrent search functionality connects to torrent search providers to find download sources:
 
 1. **Primary Source**: The Tor hidden service (.onion) is used for privacy
 2. **Fallback Sources**: If Tor is unavailable or slow, clearnet mirrors are used
@@ -404,19 +416,17 @@ download record tracks which episodes are included via the `episodeIds` field,
 allowing the system to properly update all related episodes when the download
 completes.
 
-Downloads are handled via 1337x torrent search using the Tor hidden service URL.
+Downloads are handled via torrent search providers using Tor for privacy.
 
 When a request comes in to play a movie or TV show (via a URL that was in a
 `.strm` file from Jellyfin) and the content hasn't been downloaded yet, the
 backend serves a progress video showing the download status. Once downloaded,
 the `.strm` file is updated to point directly to the file for optimal playback.
 
-When downloading the information about the download must be saved in the
-database and then the magnet URL must be passed to QBittorrent to download the
-needed content only. When the download is finished it must be moved to one of
-the media disks in the appropriate directory (or the default storage if no
-external disks are configured). If the TV show is already present on a disk it
-should be used to store more of that show.
+Download information is saved in the database, and the magnet URL is passed to
+QBittorrent. When the download completes, the file is moved to the appropriate
+media disk (or default storage if no external disks are configured). If a TV
+show already exists on a disk, new episodes are stored alongside it.
 
 ### Download Manager
 
@@ -467,14 +477,13 @@ service:
    - The media item's `filePath` and `diskPath` are updated to reflect the
      file's location
    - **The `.strm` file is updated** to contain the direct path to the video
-     file (e.g., `/media/movies/The Matrix (1999)/The Matrix.mkv`) instead of
-     the progress video URL
+     file instead of the progress video URL
    - **Jellyfin is notified** to refresh the media item so it recognizes the
      updated `.strm` file and can enable direct play
 
 6. **Recovery Handling**: The download manager also handles edge cases:
    - If a download was marked complete but the file wasn't moved (e.g., due to
-     a container restart), it will be re-processed on the next sync
+     a service restart), it will be re-processed on the next sync
    - Path mapping between QBittorrent's internal paths and the backend's
      accessible paths is handled automatically
    - Multi-file torrents are searched recursively to find the main video file
@@ -531,11 +540,10 @@ Each media item has a dedicated details page (`/media/:id`) that provides:
 - **Related content**: For TV episodes, shows how many related episodes are in
   the library
 
-## Frontend design
+## Frontend
 
-The frontend must be a Next.js web interface that speaks to the backend server.
-The frontend does not speak directly to other services like QBittorrent or
-Jellyfin.
+The frontend is a Next.js web application that communicates exclusively with the
+backend API — it does not talk to QBittorrent or Jellyfin directly.
 
 ### Error Handling
 
@@ -549,9 +557,8 @@ The frontend implements comprehensive error handling to prevent crashes:
 - **Graceful Degradation**: API errors are caught and displayed to users with
   helpful messages rather than crashing the application
 
-The homepage must provide a text box that allows the user to quickly enter the
-name of something they want and it will be passed to the backend server to
-determine what TV shows or movies exist that could be added to the library.
+The homepage provides a search box for quickly finding movies and TV shows to add
+to the library.
 
 ### Library Grid
 
@@ -566,11 +573,8 @@ navigates to the media details page. The grid shows:
 **Note**: The grid uses a clean design without hover overlays or action icons.
 All actions are available on the media details page.
 
-The frontend must show basic disk statistics so the user knows if they need to
-expand their storage.
-
-The frontend must provide basic settings, such as the VPN username and password,
-bandwidth limits, etc.
+The frontend shows disk statistics so users know when they need to expand
+storage, and provides settings for VPN credentials, bandwidth limits, and more.
 
 ### Downloads Page
 
@@ -593,7 +597,7 @@ The frontend provides a "Watch" button in the navbar that redirects users to
 Jellyfin. The backend automatically sets up Jellyfin on first run with:
 
 - Default credentials (username: `qar`, password: `qar`)
-- Media libraries pointing to `/media/movies`, `/media/tv`, and `/media/web`
+- Media libraries pointing to the content directory (Movies, TV, Web)
 - Automatic token-based authentication so users don't need to log in
 
 #### Automatic Library Setup
@@ -612,17 +616,7 @@ manually add libraries. The backend runs a periodic background task that:
    backoff (5s to 60s intervals) until Jellyfin is fully configured
 
 This means a user can go from a blank installation to a fully working Jellyfin
-server with no manual configuration. The setup handles:
-
-- **Slow Jellyfin startup**: If Jellyfin takes time to start, the backend
-  patiently waits and retries
-- **Pre-configured instances**: If Jellyfin was previously set up, the backend
-  ensures libraries exist and are properly configured
-- **Clean error logging**: Network errors and API failures are logged concisely
-  without verbose stack traces
-
-Any media added through the Qar frontend will automatically appear in Jellyfin
-since it watches the library directories with real-time monitoring enabled.
+server with no manual configuration.
 
 The redirect flow:
 1. User clicks "Watch" button
@@ -630,33 +624,13 @@ The redirect flow:
 3. Page calls `/api/jellyfin/status` to check if Jellyfin is ready
 4. If not configured, page calls `/api/jellyfin/setup` to auto-configure
 5. Page gets an access token via `/api/jellyfin/token`
-6. Page redirects to `http://localhost:8096/web/qar-login.html` (served by Jellyfin)
+6. Page redirects to `http://localhost:8096/web/qar-login.html`
 7. The qar-login.html page sets Jellyfin credentials in localStorage and redirects to the Jellyfin home page
 
-The qar-login.html file is mounted into the Jellyfin container at
-`/jellyfin/jellyfin-web/qar-login.html` and served at `http://localhost:8096/web/qar-login.html`.
-This ensures the credentials are set on the correct origin (localhost:8096).
+## API Reference
 
-## Architecture
-
-### Service Ports
-
-| Service | Port | Description |
-|---------|------|-------------|
-| Frontend | 3000 | Next.js web interface |
-| Backend | 3001 | Express API server |
-| Jellyfin | 8096 | Media streaming server |
-| QBittorrent | 8888 | Torrent client (VPN-protected) |
-
-### Frontend-Backend Communication
-
-The frontend communicates with the backend via a RESTful HTTP API:
-
-- **Frontend (port 3000)**: Serves the Next.js web application
-- **Backend (port 3001)**: Provides API endpoints under `/api/*`
-
-The frontend uses Next.js rewrites to proxy all `/api/*` requests to the backend.
-This is configured at build time via the `BACKEND_URL` environment variable.
+The frontend communicates with the backend via a RESTful HTTP API. The frontend
+uses Next.js rewrites to proxy all `/api/*` requests to the backend.
 
 **API Endpoints:**
 - `/api/media` - Media management (CRUD operations)
@@ -668,7 +642,7 @@ This is configured at build time via the `BACKEND_URL` environment variable.
 - `/api/media/tv/shows/:id` - Get a TV show with all its episodes
 - `/api/media/tv/show/:title` - Delete entire TV show (all episodes)
 - `/api/media/tv/show/:title/pin` - Pin all episodes of a TV show
-- `/api/search` - OMDb and torrent search
+- `/api/search` - OMDB and torrent search
 - `/api/downloads` - Download management
 - `/api/downloads/active` - Get active downloads only
 - `/api/downloads/history` - Get download history (completed downloads)
@@ -678,12 +652,8 @@ This is configured at build time via the `BACKEND_URL` environment variable.
 - `/api/stats/disks` - Get disk storage information
 - `/api/jellyfin` - Jellyfin integration (status, setup, token, redirect)
 - `/api/scanner` - Content scanning and recovery
-- `/api/scanner/status` - Get scanner status and progress
-- `/api/scanner/scan` - Trigger content scan manually
-- `/api/scanner/preview` - Preview scannable items without importing
-- `/api/scanner/fix-images` - Fix items with missing poster images
-- `/stream/movies/:title/:year` - Stream movies (serves file or redirects to progress)
-- `/stream/tv/:title/:episode` - Stream TV episodes (e.g., `/stream/tv/stranger+things/s01e01`)
+- `/stream/movies/:title/:year` - Stream movies
+- `/stream/tv/:title/:episode` - Stream TV episodes
 - `/stream/web/:title` - Stream web content
 
 ### Deleting Media
@@ -702,24 +672,117 @@ When media is deleted through Qar:
 For TV shows, you can delete individual episodes or use the bulk delete endpoint
 to remove the entire show at once.
 
+## Configuration
+
+### Configuration File
+
+Native installs use `/etc/qar/qar.conf`. All settings are environment variable
+format (`KEY=value`). The full list of settings:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `DB_DIALECT` | `sqlite` | Database engine: `sqlite` or `postgres` |
+| `SQLITE_PATH` | `/qar/data/qar.db` | SQLite database file path |
+| `DATABASE_URL` | *(commented out)* | PostgreSQL connection string |
+| `JELLYFIN_URL` | `http://127.0.0.1:8096` | Jellyfin server URL |
+| `QBITTORRENT_URL` | `http://127.0.0.1:8888` | QBittorrent WebUI URL |
+| `OMDB_API_KEY` | *(empty)* | [OMDB API key](https://www.omdbapi.com/apikey.aspx) for metadata |
+| `OPENROUTER_API_KEY` | *(empty)* | OpenRouter key for AI recommendations |
+| `CONTENT_PATH` | `/qar/content` | Directory for `.strm` and metadata files |
+| `DOWNLOADS_PATH` | `/qar/downloads` | Active download directory |
+| `DISKS_PATH` | `/qar/disks` | External storage mount points |
+| `JELLYFIN_MEDIA_PATH` | `/qar/content` | Path where Jellyfin accesses content |
+
+### Switching to PostgreSQL
+
+To use PostgreSQL instead of SQLite:
+
+```bash
+sudo nano /etc/qar/qar.conf
+# Set: DB_DIALECT=postgres
+# Uncomment: DATABASE_URL=postgres://qar:password@localhost:5432/qar
+sudo systemctl restart qar-backend
+```
+
+### Managing Services
+
+```bash
+# Start everything
+sudo systemctl start qar-backend
+
+# Check status of all services
+sudo systemctl status qar-backend qar-frontend qar-vpn qar-qbittorrent
+
+# Restart VPN (e.g., after changing VPN region)
+sudo systemctl restart qar-vpn qar-qbittorrent
+
+# View logs
+sudo journalctl -u qar-backend -f
+sudo journalctl -u qar-vpn -f
+```
+
+## Building from Source
+
+### Prerequisites
+
+- Node.js >= 18
+- [nfpm](https://nfpm.goreleaser.com/install/) for package generation
+
+### Build Packages
+
+```bash
+./packaging/build.sh          # Build both .deb and .rpm
+./packaging/build.sh deb      # Build only .deb
+./packaging/build.sh rpm      # Build only .rpm
+```
+
+Packages are output to `dist/packages/`.
+
+### Testing Packages with QEMU
+
+A QEMU test harness is included for testing packages in a clean VM:
+
+```bash
+./packaging/qemu-test.sh create    # Create a Debian 12 VM
+./packaging/qemu-test.sh start     # Boot the VM
+./packaging/qemu-test.sh deploy    # Build and install the .deb
+./packaging/qemu-test.sh ssh       # SSH into the VM
+./packaging/qemu-test.sh status    # Check all services
+./packaging/qemu-test.sh stop      # Shut down the VM
+./packaging/qemu-test.sh destroy   # Remove the VM
+```
+
+### Versioning
+
+Qar uses [semantic versioning](https://semver.org/). The current version is
+stored in the `VERSION` file at the repository root.
+
 ## Development
+
+Docker is used for local development and testing.
 
 ### Running the Stack
 
 ```bash
-# Start all services (excluding VPN/QBittorrent)
+cp example.env .env
+# Edit .env with your API keys
+
+# Start all services
 docker compose up -d --build
 
 # Start with VPN/QBittorrent (requires VPN credentials in .env)
 docker compose up -d --build pia-qbittorrent
 ```
 
+The frontend is available at http://localhost:3000 and Jellyfin at
+http://localhost:8096.
+
 ### Configuring VPN for Development
 
 1. Enter your PIA VPN credentials in the Settings page (http://localhost:3000/settings)
 2. Click "Save Settings" to store credentials in the database
 3. Click "Sync VPN Settings" to write credentials to the `.env` file
-4. Start or restart the QBittorrent container:
+4. Start or restart QBittorrent:
    ```bash
    docker compose up -d pia-qbittorrent
    ```
@@ -727,17 +790,12 @@ docker compose up -d --build pia-qbittorrent
 
 ### Testing
 
-Tests are run inside Docker containers to ensure consistency:
-
 ```bash
 # Run unit tests (includes TypeScript compilation check)
 ./backend/run-tests.sh
 
 # Run integration tests (tests frontend-backend communication)
 ./backend/run-tests.sh integration
-
-# View last test output
-./backend/run-tests.sh last
 
 # Run with coverage
 ./backend/run-tests.sh run --coverage
@@ -747,3 +805,7 @@ The test suite includes:
 - **Unit tests**: Test individual components and configuration
 - **Type checking**: TypeScript compilation to catch type errors
 - **Integration tests**: Verify frontend and backend can communicate correctly
+
+## License
+
+MIT

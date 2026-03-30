@@ -1,11 +1,30 @@
 import { Sequelize, DataTypes, Model, Optional } from 'sequelize';
 import { config } from '../config';
+import path from 'path';
+import fs from 'fs';
 
-export const sequelize = new Sequelize(config.databaseUrl, {
-  dialect: 'postgres',
-  logging: false,
-});
+// Initialize Sequelize based on configured dialect
+let sequelize: Sequelize;
 
+if (config.dbDialect === 'sqlite') {
+  // Ensure the SQLite database directory exists
+  const dbDir = path.dirname(config.sqlitePath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+  sequelize = new Sequelize({
+    dialect: 'sqlite',
+    storage: config.sqlitePath,
+    logging: false,
+  });
+} else {
+  sequelize = new Sequelize(config.databaseUrl, {
+    dialect: 'postgres',
+    logging: false,
+  });
+}
+
+export { sequelize };
 // Media Item Types
 export type MediaType = 'movie' | 'tv' | 'web';
 export type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'failed' | 'paused';
@@ -233,12 +252,12 @@ Download.init(
       type: DataTypes.DATE,
     },
     episodeIds: {
-      type: DataTypes.ARRAY(DataTypes.UUID),
+      type: DataTypes.JSON,
       allowNull: true,
       defaultValue: [],
     },
     detectedEpisodes: {
-      type: DataTypes.JSONB,
+      type: DataTypes.JSON,
       allowNull: true,
     },
     downloadReason: {

@@ -234,8 +234,21 @@ async function start() {
     await sequelize.authenticate();
     console.log('Database connected');
     
-    // Sync models
+    // Sync models — for SQLite, disable foreign keys during alter to prevent constraint errors
+    if (config.dbDialect === 'sqlite') {
+      await sequelize.query('PRAGMA foreign_keys = OFF');
+      const [backupTables] = await sequelize.query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_backup'",
+      );
+      for (const row of backupTables as any[]) {
+        console.log(`Dropping leftover backup table: ${row.name}`);
+        await sequelize.query(`DROP TABLE IF EXISTS \`${row.name}\``);
+      }
+    }
     await sequelize.sync({ alter: true });
+    if (config.dbDialect === 'sqlite') {
+      await sequelize.query('PRAGMA foreign_keys = ON');
+    }
     console.log('Models synchronized');
     
     // Ensure content directories exist (movies, tv, web)
@@ -268,6 +281,85 @@ async function start() {
     mediaService.validateFilePaths().catch(err => {
       console.error('Error validating file paths:', err);
     });
+    
+    // Backfill missing posters if OMDB is configured
+    if (omdbService.isConfigured()) {
+      setImmediate(async () => {
+        try {
+          const { Op } = await import('sequelize');
+          const allItems = await MediaItem.findAll({
+            where: { type: { [Op.in]: ['movie', 'tv'] } },
+          });
+          const missingItems = allItems.filter(i => !i.posterUrl || i.posterUrl === '');
+          
+          const allShows = await TVShow.findAll();
+          const missingShows = allShows.filter(s => !s.posterUrl || s.posterUrl === '');
+          
+          if (missingItems.length > 0 || missingShows.length > 0) {
+            console.log(`[Startup] Backfilling posters for ${missingItems.length} items and ${missingShows.length} shows...`);
+            
+            for (const show of missingShows) {
+              try {
+                const results = await omdbService.search(show.title, 'series');
+                if (results?.length > 0) {
+                  const details = await omdbService.getDetails(results[0].imdbID);
+                  if (details && details.Poster !== 'N/A') {
+                    await show.update({
+                      posterUrl: details.Poster,
+                      imdbId: details.imdbID,
+                      imdbRating: details.imdbRating ? parseFloat(details.imdbRating) : show.imdbRating,
+                      plot: details.Plot || show.plot,
+                    });
+                    console.log(`[Startup] Fixed poster for TVShow: ${show.title}`);
+                  }
+                }
+              } catch (e: any) {
+                console.warn(`[Startup] Failed: ${show.title}: ${e.message}`);
+              }
+            }
+            
+            const titleGroups = new Map<string, typeof missingItems>();
+            for (const item of missingItems) {
+              const key = `${item.type}:${item.title}`;
+              if (!titleGroups.has(key)) titleGroups.set(key, []);
+              titleGroups.get(key)!.push(item);
+            }
+            
+            for (const [, items] of titleGroups) {
+              const first = items[0];
+              try {
+                const searchType = first.type === 'tv' ? 'series' : 'movie';
+                const results = await omdbService.search(first.title, searchType);
+                if (results?.length > 0) {
+                  let best = results[0];
+                  if (first.year) {
+                    const ym = results.find(r => r.Year === String(first.year) || r.Year.startsWith(String(first.year)));
+                    if (ym) best = ym;
+                  }
+                  const details = await omdbService.getDetails(best.imdbID);
+                  if (details && details.Poster !== 'N/A') {
+                    for (const item of items) {
+                      await item.update({
+                        posterUrl: details.Poster,
+                        imdbId: details.imdbID,
+                        imdbRating: details.imdbRating ? parseFloat(details.imdbRating) : item.imdbRating,
+                        plot: details.Plot || item.plot,
+                      });
+                    }
+                    console.log(`[Startup] Fixed poster for ${items.length} items: ${first.title}`);
+                  }
+                }
+              } catch (e: any) {
+                console.warn(`[Startup] Failed: ${first.title}: ${e.message}`);
+              }
+            }
+            console.log('[Startup] Poster backfill complete');
+          }
+        } catch (e: any) {
+          console.error('[Startup] Poster backfill error:', e.message);
+        }
+      });
+    }
     
     app.listen(config.port, () => {
       console.log(`Backend server running on port ${config.port}`);

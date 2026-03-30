@@ -9,6 +9,8 @@ import { dockerService } from '../services/docker';
 import { openRouterService } from '../services/ai';
 import { config } from '../config';
 
+import { execFile } from 'child_process';
+
 const router = Router();
 const readFile = promisify(fs.readFile);
 const writeFile = promisify(fs.writeFile);
@@ -240,6 +242,90 @@ router.put('/', async (req, res) => {
     // Update OMDB API key in the service if it was changed
     if (settings.omdbApiKey !== undefined) {
       omdbService.setApiKey(settings.omdbApiKey);
+      
+      // If OMDB key was just configured, backfill missing posters in the background
+      if (settings.omdbApiKey && omdbService.isConfigured()) {
+        setImmediate(async () => {
+          try {
+            const { MediaItem, TVShow } = await import('../models');
+            const { Op } = await import('sequelize');
+            
+            const allItems = await MediaItem.findAll({
+              where: { type: { [Op.in]: ['movie', 'tv'] } },
+            });
+            const missingCount = allItems.filter(i => !i.posterUrl || i.posterUrl === '').length;
+            
+            const allShows = await TVShow.findAll();
+            const missingShows = allShows.filter(s => !s.posterUrl || s.posterUrl === '').length;
+            
+            if (missingCount > 0 || missingShows > 0) {
+              console.log(`[Settings] OMDB key configured, backfilling ${missingCount} items and ${missingShows} shows with missing posters...`);
+              
+              // Fix TV shows
+              for (const show of allShows.filter(s => !s.posterUrl || s.posterUrl === '')) {
+                try {
+                  const results = await omdbService.search(show.title, 'series');
+                  if (results?.length > 0) {
+                    const details = await omdbService.getDetails(results[0].imdbID);
+                    if (details && details.Poster !== 'N/A') {
+                      await show.update({
+                        posterUrl: details.Poster,
+                        imdbId: details.imdbID,
+                        imdbRating: details.imdbRating ? parseFloat(details.imdbRating) : show.imdbRating,
+                        plot: details.Plot || show.plot,
+                      });
+                      console.log(`[Settings] Fixed poster for TVShow: ${show.title}`);
+                    }
+                  }
+                } catch (e: any) {
+                  console.warn(`[Settings] Failed to fix poster for TVShow ${show.title}:`, e.message);
+                }
+              }
+              
+              // Fix media items grouped by title
+              const titleGroups = new Map<string, typeof allItems>();
+              for (const item of allItems.filter(i => !i.posterUrl || i.posterUrl === '')) {
+                const key = `${item.type}:${item.title}`;
+                if (!titleGroups.has(key)) titleGroups.set(key, []);
+                titleGroups.get(key)!.push(item);
+              }
+              
+              for (const [, items] of titleGroups) {
+                const first = items[0];
+                try {
+                  const searchType = first.type === 'tv' ? 'series' : 'movie';
+                  const results = await omdbService.search(first.title, searchType);
+                  if (results?.length > 0) {
+                    let best = results[0];
+                    if (first.year) {
+                      const ym = results.find(r => r.Year === String(first.year) || r.Year.startsWith(String(first.year)));
+                      if (ym) best = ym;
+                    }
+                    const details = await omdbService.getDetails(best.imdbID);
+                    if (details && details.Poster !== 'N/A') {
+                      for (const item of items) {
+                        await item.update({
+                          posterUrl: details.Poster,
+                          imdbId: details.imdbID,
+                          imdbRating: details.imdbRating ? parseFloat(details.imdbRating) : item.imdbRating,
+                          plot: details.Plot || item.plot,
+                        });
+                      }
+                      console.log(`[Settings] Fixed poster for ${items.length} items: ${first.title}`);
+                    }
+                  }
+                } catch (e: any) {
+                  console.warn(`[Settings] Failed to fix poster for ${first.title}:`, e.message);
+                }
+              }
+              
+              console.log('[Settings] Poster backfill complete');
+            }
+          } catch (e: any) {
+            console.error('[Settings] Poster backfill error:', e.message);
+          }
+        });
+      }
     }
     
     // Update OpenRouter settings in the service if they were changed
@@ -340,7 +426,7 @@ const VPN_CONTAINER_NAME = 'pia-qbittorrent';
 // is sufficient to apply any settings changes.
 router.post('/vpn/restart', async (req, res) => {
   try {
-    console.log('Syncing VPN settings and restarting container via Docker API...');
+    console.log('Syncing VPN settings and restarting QBittorrent...');
     
     // Reset availability cache
     qbittorrentService.resetAvailability();
@@ -375,24 +461,52 @@ router.post('/vpn/restart', async (req, res) => {
     
     // Check if Docker API is available
     const dockerAvailable = await dockerService.isDockerAvailable();
-    if (!dockerAvailable) {
+    if (dockerAvailable) {
+      // Docker mode: restart the VPN container
+      const restartResult = await dockerService.restartVpnContainer();
+      return res.json({
+        success: restartResult.success,
+        message: restartResult.message,
+        needsRestart: !restartResult.success,
+        data: restartResult.data,
+      });
+    }
+
+    // Native mode: restart VPN tunnel and QBittorrent via systemctl
+    try {
+      // Restart VPN first (recreates namespace with new settings)
+      await new Promise<void>((resolve, reject) => {
+        execFile('/usr/bin/sudo', ['/usr/bin/systemctl', 'restart', 'qar-vpn'], (error) => {
+          if (error) {
+            console.log('VPN service restart failed (may not be installed):', error.message);
+          }
+          resolve(); // Continue even if VPN service fails
+        });
+      });
+
+      // Wait for VPN namespace to be ready
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Then restart QBittorrent (runs inside VPN namespace)
+      await new Promise<void>((resolve, reject) => {
+        execFile('/usr/bin/sudo', ['/usr/bin/systemctl', 'restart', 'qar-qbittorrent'], (error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      return res.json({
+        success: true,
+        message: 'VPN and QBittorrent services restarted with new settings.',
+        needsRestart: false,
+      });
+    } catch (systemctlError: any) {
+      console.log('systemctl restart failed:', systemctlError.message);
       return res.json({
         success: false,
-        message: 'Docker API not available. Settings saved but container cannot be restarted automatically. Please restart the pia-qbittorrent container manually.',
+        message: 'VPN settings saved but services could not be restarted automatically. Run: sudo systemctl restart qar-vpn qar-qbittorrent',
         needsRestart: true,
       });
     }
-    
-    // Restart the container using Docker API
-    // The startup wrapper will read the updated config files on restart
-    const restartResult = await dockerService.restartVpnContainer();
-    
-    res.json({
-      success: restartResult.success,
-      message: restartResult.message,
-      needsRestart: !restartResult.success,
-      data: restartResult.data,
-    });
   } catch (error: any) {
     console.error('VPN restart error:', error);
     res.status(500).json({ 
@@ -424,7 +538,7 @@ function formatRegionName(id: string): string {
     .join(' ');
 }
 
-// Get available VPN regions by listing .ovpn files in the VPN container
+// Get available VPN regions by listing .ovpn files in the VPN service
 router.get('/vpn/regions', async (req, res) => {
   try {
     // Return cached regions if still valid
@@ -437,7 +551,7 @@ router.get('/vpn/regions', async (req, res) => {
     try {
       ovpnFiles = await dockerService.listOvpnFiles();
     } catch (e) {
-      console.log('Could not list .ovpn files from container, trying PIA API fallback');
+      console.log('Could not list .ovpn files from Docker, trying PIA API fallback');
     }
 
     let regions: VpnRegion[];
@@ -573,8 +687,8 @@ async function updateVpnConf(region?: string, portForwarding?: string): Promise<
   }
   
   const content = `# VPN Configuration for Qar
-# This file is read by the VPN container at startup
-# Changes to this file require a container restart to take effect
+# This file is read by the VPN service at startup
+# Changes to this file require a service restart to take effect
 
 # PIA VPN Region
 PIA_REGION=${finalRegion}

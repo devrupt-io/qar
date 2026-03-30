@@ -409,7 +409,7 @@ function SettingsPageContent() {
       
       await api.updateSettings(vpnSettings);
       
-      // Now restart the VPN container
+      // Now restart the VPN service
       const result = await api.restartVpn();
       if (result.success) {
         setMessage({ 
@@ -651,7 +651,7 @@ function SettingsPageContent() {
             </div>
             <p className="text-slate-400 mb-4">
               Configure your PIA VPN credentials for secure downloading. After saving your credentials,
-              the QBittorrent container needs to be restarted to connect to the VPN.
+              click &quot;Apply VPN Settings&quot; to restart the VPN service and connect.
             </p>
             
             {vpnStatus && vpnStatus.configured && !vpnStatus.available && (
@@ -662,14 +662,11 @@ function SettingsPageContent() {
                     <p className="text-yellow-200 font-medium">QBittorrent Not Available</p>
                     <p className="text-yellow-300/80 text-sm mt-1">
                       VPN credentials are configured but QBittorrent is not responding. 
-                      This can happen if the container is still starting or needs to be restarted.
+                      This can happen if the VPN service is still starting or needs to be restarted.
                     </p>
                     <p className="text-yellow-300/80 text-sm mt-2">
-                      Run the following command on the host system:
+                      Click &quot;Apply VPN Settings&quot; below to restart the VPN and QBittorrent services.
                     </p>
-                    <code className="block bg-slate-900 text-slate-300 px-3 py-2 rounded mt-2 text-sm font-mono">
-                      docker compose up -d pia-qbittorrent
-                    </code>
                   </div>
                 </div>
               </div>
@@ -769,7 +766,7 @@ function SettingsPageContent() {
                   Apply VPN Settings
                 </button>
                 <p className="text-sm text-slate-500 mt-2">
-                  Saves credentials and restarts the VPN container to apply changes.
+                  Saves credentials and restarts the VPN service to apply changes.
                 </p>
               </div>
             </div>

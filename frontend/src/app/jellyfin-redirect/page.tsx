@@ -18,7 +18,7 @@ export default function JellyfinRedirectPage() {
         if (!jellyfinStatus.available) {
           setStatus('error');
           setMessage('Jellyfin is not available');
-          setErrorDetails('The Jellyfin server is not running. Please check your Docker containers.');
+          setErrorDetails('The Jellyfin server is not running. Please check that Jellyfin is installed and running.');
           return;
         }
 

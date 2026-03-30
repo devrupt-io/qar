@@ -1,11 +1,25 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
+
+// Load configuration in priority order (dotenv does NOT override existing values):
+// 1. Process environment variables (always highest priority)
+// 2. .env file (for Docker / development)
+// 3. /etc/qar/qar.conf (for native Linux package installs)
 dotenv.config();
+const confPath = process.env.QAR_CONF_PATH || '/etc/qar/qar.conf';
+if (fs.existsSync(confPath)) {
+  dotenv.config({ path: confPath });
+}
+
+export type DbDialect = 'postgres' | 'sqlite';
 
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
+  dbDialect: (process.env.DB_DIALECT || 'postgres') as DbDialect,
   databaseUrl: process.env.DATABASE_URL || 'postgres://qar:qar_password@localhost:5432/qar',
-  qbittorrentUrl: process.env.QBITTORRENT_URL || 'http://localhost:8888',
-  jellyfinUrl: process.env.JELLYFIN_URL || 'http://jellyfin:8096',
+  sqlitePath: process.env.SQLITE_PATH || '/qar/data/qar.db',
+  qbittorrentUrl: process.env.QBITTORRENT_URL || 'http://127.0.0.1:8888',
+  jellyfinUrl: process.env.JELLYFIN_URL || 'http://127.0.0.1:8096',
   omdbApiKey: process.env.OMDB_API_KEY || '',
   
   paths: {
@@ -13,7 +27,9 @@ export const config = {
     disks: process.env.DISKS_PATH || '/qar/disks',
     downloads: process.env.DOWNLOADS_PATH || '/qar/downloads',
     config: process.env.CONFIG_PATH || '/qar/config',
-    // Default disk name (used when no external disks have the content)
+    // Jellyfin media path: where Jellyfin sees the content directory
+    // In Docker: /media (volume mount), in native installs: same as CONTENT_PATH
+    jellyfinMediaPath: process.env.JELLYFIN_MEDIA_PATH || process.env.CONTENT_PATH || '/qar/content',
     defaultDisk: process.env.DEFAULT_DISK || 'default',
     // Trash directory for deleted files (allows recovery)
     trash: process.env.TRASH_PATH || '/qar/disks/default/.trash',

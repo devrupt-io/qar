@@ -253,11 +253,15 @@ export class JellyfinService {
         Password: this.DEFAULT_PASSWORD,
       }, { headers });
 
-      // Step 5: Configure remote access (allow all)
-      await this.client.post('/Startup/RemoteAccess', {
-        EnableRemoteAccess: true,
-        EnableAutomaticPortMapping: false,
-      }, { headers });
+      // Step 5: Configure remote access (allow all) — may fail on newer Jellyfin versions
+      try {
+        await this.client.post('/Startup/RemoteAccess', {
+          EnableRemoteAccess: true,
+          EnableAutomaticPortMapping: false,
+        }, { headers });
+      } catch (e: unknown) {
+        console.warn('Jellyfin RemoteAccess setup step failed (non-critical):', getErrorMessage(e));
+      }
 
       // Step 6: Complete startup
       await this.client.post('/Startup/Complete', {}, { headers });
@@ -368,10 +372,11 @@ export class JellyfinService {
       const librariesResponse = await this.client.get('/Library/VirtualFolders', { headers });
       const existingLibraries = librariesResponse.data as JellyfinLibrary[];
 
+      const mediaBase = config.paths.jellyfinMediaPath;
       const librariesToCreate = [
-        { name: 'Movies', type: 'movies', path: '/media/movies' },
-        { name: 'TV', type: 'tvshows', path: '/media/tv' },
-        { name: 'Web', type: 'homevideos', path: '/media/web' },
+        { name: 'Movies', type: 'movies', path: `${mediaBase}/movies` },
+        { name: 'TV', type: 'tvshows', path: `${mediaBase}/tv` },
+        { name: 'Web', type: 'homevideos', path: `${mediaBase}/web` },
       ];
 
       for (const lib of librariesToCreate) {
