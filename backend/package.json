@@ -1,6 +1,6 @@
 {
   "name": "qar-backend",
-  "version": "1.0.1",
+  "version": "1.0.8",
   "description": "Qar Backend Server",
   "main": "dist/index.js",
   "scripts": {

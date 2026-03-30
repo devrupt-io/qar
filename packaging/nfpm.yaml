@@ -30,8 +30,14 @@ overrides:
       - wireguard-tools
       - iproute
       - socat
-      - jellyfin
       - qbittorrent-nox
+    recommends:
+      - jellyfin
+
+# RPM-specific settings (posttrans runs after old package cleanup during upgrades)
+rpm:
+  scripts:
+    posttrans: packaging/scripts/rpm-posttrans.sh
 
 # Install/remove scripts
 scripts:

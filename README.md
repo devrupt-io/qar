@@ -15,7 +15,17 @@
 
 ## Quick Start
 
-### Install on Debian / Ubuntu
+The easiest way to install Qar on any supported Linux distribution:
+
+```bash
+curl -fsSL https://devrupt-io.github.io/qar/install.sh | sudo bash
+```
+
+This automatically detects your OS, adds the required repositories (Jellyfin, RPM Fusion, EPEL, etc.), and installs Qar with all dependencies.
+
+Supported: Debian 12+, Ubuntu 22.04+, Fedora 40+, RHEL 9, Rocky Linux 9, AlmaLinux 9.
+
+### Manual Install: Debian / Ubuntu
 
 ```bash
 # Add the Jellyfin repository (required dependency)
@@ -38,7 +48,7 @@ sudo dpkg -i qar_1.0.1_amd64.deb
 sudo apt-get install -f    # Resolve dependencies
 ```
 
-### Install on RHEL / Fedora
+### Manual Install: Fedora
 
 ```bash
 # Add RPM Fusion repository (provides Jellyfin)
@@ -57,6 +67,35 @@ EOF
 
 # Install
 sudo dnf install qar
+```
+
+### Manual Install: RHEL / Rocky Linux / AlmaLinux (EL9)
+
+```bash
+# Enable Node.js 20 (EL9 defaults to Node.js 16 which is too old)
+sudo dnf module enable nodejs:20 -y
+
+# Add EPEL and RPM Fusion repositories
+sudo dnf install -y epel-release
+sudo /usr/bin/crb enable
+sudo dnf install -y https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm
+
+# Add the Qar repository
+sudo rpm --import https://devrupt-io.github.io/qar/rpm/KEY.gpg
+sudo tee /etc/yum.repos.d/qar.repo <<EOF
+[qar]
+name=Qar - Self-hosted media management
+baseurl=https://devrupt-io.github.io/qar/rpm/packages
+enabled=1
+gpgcheck=1
+gpgkey=https://devrupt-io.github.io/qar/rpm/KEY.gpg
+EOF
+
+# Install (Jellyfin must be installed separately on EL9)
+sudo dnf install qar
+
+# (Optional) Install Jellyfin from the official repo:
+# See https://jellyfin.org/docs/general/installation/linux
 ```
 
 Or install directly from an `.rpm` file:

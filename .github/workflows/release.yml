@@ -125,14 +125,18 @@ jobs:
           cp -r packaging/rpm-repo/packages gh-pages/rpm/
           if [ -f packaging/rpm-repo/KEY.gpg ]; then cp packaging/rpm-repo/KEY.gpg gh-pages/rpm/; fi
 
-      - name: Create index.html
+      - name: Create index.html and install script
         run: |
+          # Copy install script to gh-pages root
+          cp packaging/install.sh gh-pages/install.sh
           cat > gh-pages/index.html <<'HEREDOC'
           <!DOCTYPE html>
           <html>
           <head><title>Qar Package Repository</title></head>
           <body>
           <h1>Qar Package Repository</h1>
+          <h2>Quick Install</h2>
+          <pre>curl -fsSL https://devrupt-io.github.io/qar/install.sh | sudo bash</pre>
           <h2>Debian / Ubuntu (APT)</h2>
           <pre>
           curl -fsSL https://devrupt-io.github.io/qar/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/qar.gpg

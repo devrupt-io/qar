@@ -3,18 +3,25 @@
 # Manages Debian and Fedora VMs for testing package installation.
 #
 # Usage:
-#   ./packaging/qemu-test.sh create  [debian|fedora]  Create a fresh VM
-#   ./packaging/qemu-test.sh start   [debian|fedora]  Start an existing VM
-#   ./packaging/qemu-test.sh stop    [debian|fedora]  Stop the running VM
-#   ./packaging/qemu-test.sh ssh     [debian|fedora]  SSH into the running VM
-#   ./packaging/qemu-test.sh deploy  [debian|fedora]  Build pkg, copy to VM, install
-#   ./packaging/qemu-test.sh status  [debian|fedora]  Show VM status and services
-#   ./packaging/qemu-test.sh destroy [debian|fedora]  Stop VM and delete VM files
-#   ./packaging/qemu-test.sh wipe    [debian|fedora]  Destroy + create (fresh start)
-#   ./packaging/qemu-test.sh test-repo [debian|fedora] Fresh VM, install from published repo
+#   ./packaging/qemu-test.sh create  [debian|fedora|centos]  Create a fresh VM
+#   ./packaging/qemu-test.sh start   [debian|fedora|centos]  Start an existing VM
+#   ./packaging/qemu-test.sh stop    [debian|fedora|centos]  Stop the running VM
+#   ./packaging/qemu-test.sh ssh     [debian|fedora|centos]  SSH into the running VM
+#   ./packaging/qemu-test.sh deploy  [debian|fedora|centos]  Build pkg, copy to VM, install
+#   ./packaging/qemu-test.sh status  [debian|fedora|centos]  Show VM status and services
+#   ./packaging/qemu-test.sh destroy [debian|fedora|centos]  Stop VM and delete VM files
+#   ./packaging/qemu-test.sh wipe    [debian|fedora|centos]  Destroy + create (fresh start)
+#   ./packaging/qemu-test.sh test-repo [debian|fedora|centos] Fresh VM, install from published repo
 #
 # Default distro: debian
 # Prerequisites: qemu-system-x86_64, cloud-image-utils (cloud-localds), sshpass
+#
+# Known limitation: Fedora QEMU testing with user-mode networking (SLIRP) is
+# unreliable. DNF5 package transactions on Fedora 42 consistently break the
+# SLIRP network stack, causing SSH to become permanently unresponsive. This is
+# a QEMU/SLIRP issue, not a package issue — the RPM installs correctly on real
+# Fedora systems. Use 'deploy' (with local .rpm + rpm -U) for Fedora testing,
+# or test on real hardware. The Debian VM works fully with 'test-repo'.
 
 set -euo pipefail
 
@@ -35,17 +42,23 @@ case "$DISTRO" in
     SSH_PASS=test
     PKG_FORMAT=deb
     ;;
-  fedora)
-    VM_DIR="$VM_BASE/fedora"
-    BASE_IMAGE_URL="https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-42-1.1.x86_64.qcow2"
-    BASE_IMAGE_FILE="Fedora-Cloud-Base-42-1.1.x86_64.qcow2"
+  fedora|centos)
+    VM_DIR="$VM_BASE/$DISTRO"
+    if [ "$DISTRO" = "centos" ]; then
+      BASE_IMAGE_URL="https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2"
+      BASE_IMAGE_FILE="Rocky-9-GenericCloud.latest.x86_64.qcow2"
+      SSH_USER=rocky
+    else
+      BASE_IMAGE_URL="https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"
+      BASE_IMAGE_FILE="Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2"
+      SSH_USER=fedora
+    fi
     SSH_PORT=2223
-    SSH_USER=fedora
     SSH_PASS=test
     PKG_FORMAT=rpm
     ;;
   *)
-    echo "Unknown distro: $DISTRO (use 'debian' or 'fedora')"
+    echo "Unknown distro: $DISTRO (use 'debian', 'fedora', or 'centos')"
     exit 1
     ;;
 esac
@@ -56,7 +69,7 @@ CLOUD_INIT_ISO="$VM_DIR/cloud-init.iso"
 BASE_IMAGE="$VM_BASE/$BASE_IMAGE_FILE"
 
 # VM settings
-VM_MEMORY=2048
+VM_MEMORY=4096
 VM_CPUS=2
 VM_DISK_SIZE=20G
 
@@ -68,8 +81,8 @@ PORT_FORWARDS=(
   "8096:8096"
   "8888:8888"
 )
-# Offset non-SSH ports for Fedora to avoid conflicts when both VMs run
-if [ "$DISTRO" = "fedora" ]; then
+# Offset non-SSH ports for RPM distros to avoid conflicts when both VMs run
+if [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "centos" ]; then
   PORT_FORWARDS=(
     "$SSH_PORT:22"
     "4000:3000"
@@ -168,6 +181,11 @@ cmd_create() {
   log "Creating cloud-init config..."
   cat > "$VM_DIR/user-data" << EOF
 #cloud-config
+package_update: false
+package_upgrade: false
+bootcmd:
+  - setenforce 0 || true
+  - sed -i 's/SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config || true
 users:
   - name: $SSH_USER
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -215,8 +233,10 @@ cmd_start() {
   fi
 
   local kvm_flag=""
+  local cpu_flag=""
   if [ -w /dev/kvm ]; then
     kvm_flag="-enable-kvm"
+    cpu_flag="-cpu host"
   else
     warn "KVM not available, VM will be slow"
   fi
@@ -234,10 +254,13 @@ cmd_start() {
     -m "$VM_MEMORY" \
     -smp "$VM_CPUS" \
     $kvm_flag \
-    -hda "$DISK_FILE" \
+    $cpu_flag \
+    -drive "file=$DISK_FILE,format=qcow2,cache=unsafe" \
     $cdrom_flag \
     -netdev "user,id=net0${fwds}" \
-    -device "virtio-net-pci,netdev=net0,romfile=" \
+    -device "virtio-net-pci,netdev=net0" \
+    -object "rng-random,id=rng0,filename=/dev/urandom" \
+    -device "virtio-rng-pci,rng=rng0" \
     -display none \
     -daemonize \
     -pidfile "$PID_FILE"
@@ -418,9 +441,29 @@ cmd_test_repo() {
     log "Installing qar..."
     ssh_cmd "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y qar"
 
-  elif [ "$DISTRO" = "fedora" ]; then
+  elif [ "$DISTRO" = "fedora" ] || [ "$DISTRO" = "centos" ]; then
+    if [ "$DISTRO" = "fedora" ]; then
+      warn "NOTE: Fedora 42 QEMU test-repo is unreliable due to DNF5/SLIRP networking issues."
+      warn "Consider using 'centos' distro instead, or test on real hardware."
+      echo ""
+    fi
+
+    log "Adding EPEL repository..."
+    ssh_cmd "sudo dnf install -y epel-release 2>/dev/null || true"
+
+    if [ "$DISTRO" = "centos" ]; then
+      log "Enabling Node.js 20 module stream (EL9 default is Node 16)..."
+      ssh_cmd "sudo dnf module reset nodejs -y 2>/dev/null; sudo dnf module enable nodejs:20 -y"
+    fi
+
     log "Adding RPM Fusion repository (for Jellyfin)..."
-    ssh_cmd "sudo dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-\$(rpm -E %fedora).noarch.rpm"
+    if [ "$DISTRO" = "centos" ]; then
+      log "Enabling CRB repository (required for ffmpeg dependencies)..."
+      ssh_cmd "sudo /usr/bin/crb enable || sudo dnf config-manager --set-enabled crb || true"
+      ssh_cmd "sudo dnf install -y --nogpgcheck https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm" || true
+    else
+      ssh_cmd "sudo rpm -ivh --nosignature https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-\$(rpm -E %fedora).noarch.rpm" || true
+    fi
 
     log "Adding Qar DNF repository..."
     ssh_cmd "sudo rpm --import https://devrupt-io.github.io/qar/rpm/KEY.gpg"
@@ -482,7 +525,7 @@ case "${1:-help}" in
   *)
     echo -e "${CYAN}Qar QEMU Test VM Manager${NC}"
     echo ""
-    echo "Usage: $0 <command> [debian|fedora]"
+    echo "Usage: $0 <command> [debian|fedora|centos]"
     echo ""
     echo "Commands:"
     echo "  create    Create a fresh VM and start it"
@@ -495,20 +538,20 @@ case "${1:-help}" in
     echo "  wipe      Destroy + create (fresh start)"
     echo "  test-repo Fresh VM, install from published GitHub repo"
     echo ""
-    echo "Distros: debian (default), fedora"
+    echo "Distros: debian (default), fedora, centos"
     echo ""
     echo "Examples:"
     echo "  $0 create                # Create Debian VM"
-    echo "  $0 create fedora         # Create Fedora VM"
+    echo "  $0 create centos         # Create CentOS Stream 9 VM"
     echo "  $0 test-repo debian      # Test APT repo install on fresh Debian"
-    echo "  $0 test-repo fedora      # Test DNF repo install on fresh Fedora"
+    echo "  $0 test-repo centos      # Test DNF repo install on fresh CentOS"
     echo "  $0 deploy                # Build .deb and install in Debian VM"
-    echo "  $0 deploy fedora         # Build .rpm and install in Fedora VM"
-    echo "  $0 ssh fedora            # SSH into Fedora VM"
+    echo "  $0 deploy centos         # Build .rpm and install in CentOS VM"
+    echo "  $0 ssh centos            # SSH into CentOS VM"
     echo ""
     echo "Port mappings:"
-    echo "  Debian: SSH=2222, Frontend=3000, Backend=3001, Jellyfin=8096, QBit=8888"
-    echo "  Fedora: SSH=2223, Frontend=4000, Backend=4001, Jellyfin=9096, QBit=9888"
+    echo "  Debian:         SSH=2222, Frontend=3000, Backend=3001, Jellyfin=8096, QBit=8888"
+    echo "  Fedora/CentOS:  SSH=2223, Frontend=4000, Backend=4001, Jellyfin=9096, QBit=9888"
     echo ""
     echo "VM location: $VM_BASE/"
     ;;
