@@ -62,7 +62,19 @@ jobs:
         if: env.GPG_PRIVATE_KEY != ''
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-        run: echo "$GPG_PRIVATE_KEY" | gpg --import
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --import
+          # Configure RPM to use the GPG key for signing
+          echo "%_gpg_name Qar Team" > ~/.rpmmacros
+
+      - name: Sign RPM package
+        if: env.GPG_PRIVATE_KEY != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq rpm
+          RPM_FILE=$(ls dist/packages/*.rpm | head -1)
+          rpmsign --addsign "$RPM_FILE"
 
       - name: Install createrepo
         run: sudo apt-get update -qq && sudo apt-get install -y -qq createrepo-c
