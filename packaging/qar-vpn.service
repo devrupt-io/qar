@@ -1,0 +1,19 @@
+[Unit]
+Description=Qar Media System - VPN Namespace
+Documentation=https://github.com/devrupt-io/qar
+After=network-online.target
+Wants=network-online.target
+Before=qar-qbittorrent.service
+
+[Service]
+Type=simple
+ExecStart=/opt/qar/qar-vpn.sh
+ExecStop=/bin/ip netns del qarvpn
+Restart=on-failure
+RestartSec=10
+
+# Runs as root (needs network namespace and WireGuard privileges)
+# QBittorrent runs as qar user inside the namespace
+
+[Install]
+WantedBy=multi-user.target

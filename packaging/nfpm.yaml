@@ -1,0 +1,102 @@
+# nfpm configuration for building Qar .deb and .rpm packages
+# https://nfpm.goreleaser.com/configuration/
+name: qar
+arch: amd64
+platform: linux
+version: "${QAR_VERSION}"
+maintainer: "Qar Team"
+description: "Qar - Self-hosted all-in-one media management system"
+vendor: "Qar"
+homepage: "https://github.com/devrupt-io/qar"
+license: "MIT"
+
+# Package dependencies
+depends:
+  - nodejs (>= 18.0.0)
+  - tor
+  - ffmpeg
+  - wireguard-tools
+  - iproute2
+  - socat
+  - jellyfin
+  - qbittorrent-nox
+
+# Override for RPM-specific dependency names
+overrides:
+  rpm:
+    depends:
+      - nodejs >= 18.0.0
+      - tor
+      - ffmpeg-free
+      - wireguard-tools
+      - iproute
+      - socat
+      - jellyfin
+      - qbittorrent-nox
+
+# Install/remove scripts
+scripts:
+  preinstall: packaging/scripts/preinstall.sh
+  postinstall: packaging/scripts/postinstall.sh
+  preremove: packaging/scripts/preremove.sh
+  postremove: packaging/scripts/postremove.sh
+
+# Files to include in the package
+contents:
+  # Backend application
+  - src: dist/backend/
+    dst: /opt/qar/backend/
+    type: tree
+
+  # Frontend application (Next.js standalone)
+  - src: dist/frontend/
+    dst: /opt/qar/frontend/
+    type: tree
+
+  # Configuration file
+  - src: packaging/qar.conf
+    dst: /etc/qar/qar.conf
+    type: config
+
+  # Systemd service files
+  - src: packaging/qar-backend.service
+    dst: /usr/lib/systemd/system/qar-backend.service
+  - src: packaging/qar-frontend.service
+    dst: /usr/lib/systemd/system/qar-frontend.service
+  - src: packaging/qar-qbittorrent.service
+    dst: /usr/lib/systemd/system/qar-qbittorrent.service
+  - src: packaging/qar-vpn.service
+    dst: /usr/lib/systemd/system/qar-vpn.service
+  - src: packaging/qar-vpn.sh
+    dst: /opt/qar/qar-vpn.sh
+    file_info:
+      mode: 0755
+
+  # Version file
+  - src: VERSION
+    dst: /opt/qar/VERSION
+
+  # VPN / qBittorrent config helpers (from config/ dir)
+  - src: config/pia-ca.rsa.4096.crt
+    dst: /qar/config/pia-ca.rsa.4096.crt
+  - src: config/vpn-startup.sh
+    dst: /qar/config/vpn-startup.sh
+    file_info:
+      mode: 0755
+  - src: config/post-vpn-connect.sh
+    dst: /qar/config/post-vpn-connect.sh
+    file_info:
+      mode: 0755
+  - src: config/qar-login.html
+    dst: /qar/config/qar-login.html
+
+  # Sudoers rule for qar user to manage QBittorrent service
+  - src: packaging/sudoers-qar
+    dst: /etc/sudoers.d/qar
+    file_info:
+      mode: 0440
+
+  # Default QBittorrent config (localhost auth bypass, correct paths)
+  - src: config/qBittorrent.conf
+    dst: /qar/config/qBittorrent/config/qBittorrent.conf
+    type: config

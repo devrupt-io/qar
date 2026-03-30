@@ -18,8 +18,20 @@
 ### Install on Debian / Ubuntu
 
 ```bash
+# Add the Qar repository
+curl -fsSL https://devrupt-io.github.io/qar/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/qar.gpg
+echo "deb [signed-by=/usr/share/keyrings/qar.gpg] https://devrupt-io.github.io/qar stable main" | sudo tee /etc/apt/sources.list.d/qar.list
+
+# Install
+sudo apt update
+sudo apt install qar
+```
+
+Or install directly from a `.deb` file:
+
+```bash
 sudo dpkg -i qar_1.0.0_amd64.deb
-sudo apt-get install -f    # Resolve dependencies (Jellyfin, QBittorrent, etc.)
+sudo apt-get install -f    # Resolve dependencies
 ```
 
 ### Install on RHEL / Fedora

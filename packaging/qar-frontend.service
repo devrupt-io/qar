@@ -1,0 +1,27 @@
+[Unit]
+Description=Qar Media System - Frontend
+Documentation=https://github.com/devrupt-io/qar
+After=network.target qar-backend.service
+Requires=qar-backend.service
+
+[Service]
+Type=simple
+User=qar
+Group=qar
+EnvironmentFile=/etc/qar/qar.conf
+Environment=NODE_ENV=production
+Environment=PORT=3000
+WorkingDirectory=/opt/qar/frontend
+ExecStart=/usr/bin/node /opt/qar/frontend/server.js
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/qar /etc/qar
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

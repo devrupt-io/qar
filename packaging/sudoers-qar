@@ -1,0 +1,7 @@
+# Allow the qar service user to manage QBittorrent and VPN without a password
+qar ALL=(root) NOPASSWD: /usr/bin/systemctl restart qar-qbittorrent
+qar ALL=(root) NOPASSWD: /usr/bin/systemctl stop qar-qbittorrent
+qar ALL=(root) NOPASSWD: /usr/bin/systemctl start qar-qbittorrent
+qar ALL=(root) NOPASSWD: /usr/bin/systemctl restart qar-vpn
+qar ALL=(root) NOPASSWD: /usr/bin/systemctl stop qar-vpn
+qar ALL=(root) NOPASSWD: /usr/bin/systemctl start qar-vpn

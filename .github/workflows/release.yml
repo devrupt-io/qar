@@ -1,0 +1,120 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install nfpm
+        run: |
+          curl -sfL https://github.com/goreleaser/nfpm/releases/download/v2.45.2/nfpm_2.45.2_Linux_x86_64.tar.gz | tar xz -C /usr/local/bin nfpm
+          nfpm --version
+
+      - name: Build packages
+        run: ./packaging/build.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/packages/
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/packages/*.deb
+            dist/packages/*.rpm
+          generate_release_notes: true
+
+  publish-ppa:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download .deb artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist/packages/
+
+      - name: Import GPG key
+        if: env.GPG_PRIVATE_KEY != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: echo "$GPG_PRIVATE_KEY" | gpg --import
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+        continue-on-error: true
+
+      - name: Initialize gh-pages if needed
+        run: |
+          if [ ! -d gh-pages ]; then
+            mkdir gh-pages
+          fi
+
+      - name: Generate APT repository
+        run: |
+          DEB_FILE=$(ls dist/packages/*.deb | head -1)
+          
+          # Copy existing pool if it exists
+          if [ -d gh-pages/pool ]; then
+            cp -r gh-pages/pool packaging/ppa/
+          fi
+          
+          ./packaging/ppa/publish.sh "$DEB_FILE"
+          
+          # Copy generated repo to gh-pages
+          cp -r packaging/ppa/pool gh-pages/
+          cp -r packaging/ppa/dists gh-pages/
+          [ -f packaging/ppa/KEY.gpg ] && cp packaging/ppa/KEY.gpg gh-pages/
+
+      - name: Create index.html
+        run: |
+          cat > gh-pages/index.html <<'HEREDOC'
+          <!DOCTYPE html>
+          <html>
+          <head><title>Qar APT Repository</title></head>
+          <body>
+          <h1>Qar APT Repository</h1>
+          <p>To install Qar on Debian/Ubuntu:</p>
+          <pre>
+          curl -fsSL https://devrupt-io.github.io/qar/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/qar.gpg
+          echo "deb [signed-by=/usr/share/keyrings/qar.gpg] https://devrupt-io.github.io/qar stable main" | sudo tee /etc/apt/sources.list.d/qar.list
+          sudo apt update
+          sudo apt install qar
+          </pre>
+          </body>
+          </html>
+          HEREDOC
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages
+          keep_files: true

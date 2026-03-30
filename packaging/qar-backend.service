@@ -1,0 +1,26 @@
+[Unit]
+Description=Qar Media System - Backend
+Documentation=https://github.com/devrupt-io/qar
+After=network.target qar-qbittorrent.service
+Wants=qar-frontend.service qar-qbittorrent.service
+
+[Service]
+Type=simple
+User=qar
+Group=qar
+EnvironmentFile=/etc/qar/qar.conf
+Environment=PORT=3001
+WorkingDirectory=/opt/qar/backend
+ExecStart=/usr/bin/node /opt/qar/backend/index.js
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/qar
+ReadOnlyPaths=/opt/qar /etc/qar
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

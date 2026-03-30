@@ -1,0 +1,26 @@
+[Unit]
+Description=Qar Media System - QBittorrent
+Documentation=https://github.com/qbittorrent/qBittorrent/wiki
+After=network.target qar-vpn.service
+Requires=qar-vpn.service
+Before=qar-backend.service
+
+[Service]
+Type=simple
+
+# Wait for the VPN namespace to be ready before starting QBittorrent
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do ip netns list 2>/dev/null | grep -q qarvpn && exit 0; sleep 2; done; echo "Warning: VPN namespace not ready after 60s"'
+
+# Run QBittorrent inside the VPN network namespace.
+# All traffic is forced through the WireGuard tunnel (kill switch).
+ExecStart=/bin/bash -c 'if ip netns list | grep -q qarvpn; then exec ip netns exec qarvpn /usr/bin/sudo -u qar /usr/bin/qbittorrent-nox --webui-port=8888 --profile=/qar/config; else echo "VPN namespace not found, running without VPN isolation"; exec /usr/bin/sudo -u qar /usr/bin/qbittorrent-nox --webui-port=8888 --profile=/qar/config; fi'
+Restart=always
+RestartSec=10
+
+# Security hardening
+ProtectHome=true
+ReadWritePaths=/qar
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
