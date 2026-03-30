@@ -58,3 +58,18 @@ Priority: optional
 Homepage: https://github.com/devrupt-io/qar
 Description: Qar - Self-hosted all-in-one media management system
 
+Package: qar
+Version: 1.0.5
+Architecture: amd64
+Maintainer: Qar Team
+Installed-Size: 54497
+Depends: nodejs (>= 18.0.0), tor, ffmpeg, wireguard-tools, iproute2, socat, jellyfin, qbittorrent-nox
+Filename: pool/main/qar_1.0.5_amd64.deb
+Size: 15932014
+MD5sum: cd14a1d62aa9797ca8f603448b2a43d9
+SHA1: 01b9101c5b1f4ac43ffbaa6897321b89647485f0
+SHA256: 660ee88c88783424425c4a8f971aba23ebf9d0c400b4501417203832f942ab43
+Priority: optional
+Homepage: https://github.com/devrupt-io/qar
+Description: Qar - Self-hosted all-in-one media management system
+

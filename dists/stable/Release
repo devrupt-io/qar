@@ -5,10 +5,10 @@ Codename: stable
 Architectures: amd64
 Components: main
 Description: Qar - Self-hosted media management system
-Date: Mon, 30 Mar 2026 04:43:08 +0000
+Date: Mon, 30 Mar 2026 05:00:04 +0000
 MD5Sum:
- 9dbe7f344128b49cbc50537fc480463d 2156 main/binary-amd64/Packages
- e421864b6380ed5f8dc75d4fcca9b632 747 main/binary-amd64/Packages.gz
+ 9fd926650f7ba4cc74f403786afad9a4 2695 main/binary-amd64/Packages
+ 396a0dc73c13240dc83cac9946e9623b 851 main/binary-amd64/Packages.gz
 SHA256:
- 3fb82a0723fd58656058fd079c764b80b8c7301f0cc81131611ebbedf3353b84 2156 main/binary-amd64/Packages
- f7da811b25390ffb53ccc2984b57363d0a3c806899446df279479d3736b92a12 747 main/binary-amd64/Packages.gz
+ d65467f76c543181c8bae4259d00c95017000199f9d13a291ecc2f70f1b4851c 2695 main/binary-amd64/Packages
+ 2a536430c34be953017176b8c35e22fcab5fa2430b770a897bf715ba4495609a 851 main/binary-amd64/Packages.gz
