@@ -1,0 +1,34 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Qar Team
+Label: Qar
+Suite: stable
+Codename: stable
+Architectures: amd64
+Components: main
+Description: Qar - Self-hosted media management system
+Date: Mon, 30 Mar 2026 04:18:00 +0000
+MD5Sum:
+ b64964277837fd9b5c78e064688617f1 539 main/binary-amd64/Packages
+ f25fff02a550c79f52e7cd67f0e9541a 425 main/binary-amd64/Packages.gz
+SHA256:
+ d169b6b7ae7e78c4a8c71a318e38eb4edcf8d2b6183def86d2e5445d11817763 539 main/binary-amd64/Packages
+ 4b9b2046990e1f3cbeb015fe20247c28a8d243dc410dbf28bacb26a7e8ea883b 425 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQJDBAEBCgAtFiEEaCeE39ug2ZTsoYjLicRLoQF0Tr0FAmnJ+XgPHHFhckBkZXZy
+dXB0LmlvAAoJEInES6EBdE69ftcP/0NeonugZAqGuKyD4SsE36LyJyg8whkyvTWp
+unzQEO0fVzbCbioxDeIYURBhlBtKNVBDMW5AOPpcRn50bVwm+alzx+jwT012/qme
+K5D+4lVzsZjgDJg52HK4s5GwA6yvYV+sZolzyZ4XoFPVH4Q4EYDXh0YEVgEx/cPs
++ZBpEWtjoNsKL3qe0eBNfxGv8PMKGBoSiRUpnWbvppnGQZSUspGHsskdU5GBYCo8
+fYEwXohxYWKRCX8UHzM1E7TTTavTAUPWD7ituakSGUGuYtvLwpq5w490vV4ym/pj
+xTdmlRaVbdluyQv4KEQn31KALtZ7a05G4fikzDh+tz/M2anrNj6HuLElzfhs2o8i
+V5GPNm2uVpgUS1FiYWacsMh5txIdgaqXcHjxvJ4ufjuyFUEwV+GkjnActFD14/N9
++Tv8XVO6fR5a3IyRxMYN1uf+OklqTmT9Yt9Aw0C78/uiD+fCJzWYql2TJRGWtnjP
+c4pUudRCAPZLYXeC5GYVgmAmwcBr1Enkg8iNZ1dU++MwecPhuysiOE/YwhT30PWh
+I4tHHlYqi73UUOGOXL72cZ+ddjYDAaIKhpaEoAG1V3wqJia3ENg08K5q1voITDX6
+RVb24e7T+0iJMAglIYXn5DnJly1TTQa2U2OkUWgn6Tk4Xp3nQXFx4QrQy6Fv09cc
+m5EBEUCg
+=p/gQ
+-----END PGP SIGNATURE-----

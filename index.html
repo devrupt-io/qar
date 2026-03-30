@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head><title>Qar APT Repository</title></head>
+<body>
+<h1>Qar APT Repository</h1>
+<p>To install Qar on Debian/Ubuntu:</p>
+<pre>
+curl -fsSL https://devrupt-io.github.io/qar/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/qar.gpg
+echo "deb [signed-by=/usr/share/keyrings/qar.gpg] https://devrupt-io.github.io/qar stable main" | sudo tee /etc/apt/sources.list.d/qar.list
+sudo apt update
+sudo apt install qar
+</pre>
+</body>
+</html>

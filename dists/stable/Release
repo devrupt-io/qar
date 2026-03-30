@@ -1,0 +1,14 @@
+Origin: Qar Team
+Label: Qar
+Suite: stable
+Codename: stable
+Architectures: amd64
+Components: main
+Description: Qar - Self-hosted media management system
+Date: Mon, 30 Mar 2026 04:18:00 +0000
+MD5Sum:
+ b64964277837fd9b5c78e064688617f1 539 main/binary-amd64/Packages
+ f25fff02a550c79f52e7cd67f0e9541a 425 main/binary-amd64/Packages.gz
+SHA256:
+ d169b6b7ae7e78c4a8c71a318e38eb4edcf8d2b6183def86d2e5445d11817763 539 main/binary-amd64/Packages
+ 4b9b2046990e1f3cbeb015fe20247c28a8d243dc410dbf28bacb26a7e8ea883b 425 main/binary-amd64/Packages.gz
