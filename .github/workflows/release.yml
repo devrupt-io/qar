@@ -91,7 +91,7 @@ jobs:
           # Copy generated repo to gh-pages
           cp -r packaging/ppa/pool gh-pages/
           cp -r packaging/ppa/dists gh-pages/
-          [ -f packaging/ppa/KEY.gpg ] && cp packaging/ppa/KEY.gpg gh-pages/
+          if [ -f packaging/ppa/KEY.gpg ]; then cp packaging/ppa/KEY.gpg gh-pages/; fi
 
       - name: Create index.html
         run: |

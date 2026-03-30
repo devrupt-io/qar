@@ -16,3 +16,6 @@ dist/packages/
 packaging/ppa/pool/
 packaging/ppa/dists/
 packaging/ppa/KEY.gpg
+
+job-logs.txt
+
