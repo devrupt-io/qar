@@ -5,10 +5,10 @@ Maintainer: Qar Team
 Installed-Size: 54497
 Depends: nodejs (>= 18.0.0), tor, ffmpeg, wireguard-tools, iproute2, socat, jellyfin, qbittorrent-nox
 Filename: pool/main/qar_1.0.1_amd64.deb
-Size: 15932170
-MD5sum: 49646e89f390860c4f704abde50d68be
-SHA1: ffd1b4f86fd5a2b559402a3a19ce56df4a9d744d
-SHA256: f085936d96f0089068b782d864ed2bb3cac25a9d85ef6b6865dd25dcd1563547
+Size: 15932848
+MD5sum: 8d1f15665b47d4f3ba2fcdd289cad63a
+SHA1: 892c5a34727c846d597a684a09e711f36dec2a2e
+SHA256: f7241de664ac05cc35f8a0811086e357490e97bd6b36fd57b54725a58db4534f
 Priority: optional
 Homepage: https://github.com/devrupt-io/qar
 Description: Qar - Self-hosted all-in-one media management system
