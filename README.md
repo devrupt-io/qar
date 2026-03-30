@@ -18,6 +18,10 @@
 ### Install on Debian / Ubuntu
 
 ```bash
+# Add the Jellyfin repository (required dependency)
+curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/jellyfin.gpg
+echo "deb [signed-by=/usr/share/keyrings/jellyfin.gpg] https://repo.jellyfin.org/debian $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/jellyfin.list
+
 # Add the Qar repository
 curl -fsSL https://devrupt-io.github.io/qar/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/qar.gpg
 echo "deb [signed-by=/usr/share/keyrings/qar.gpg] https://devrupt-io.github.io/qar stable main" | sudo tee /etc/apt/sources.list.d/qar.list
@@ -37,6 +41,9 @@ sudo apt-get install -f    # Resolve dependencies
 ### Install on RHEL / Fedora
 
 ```bash
+# Add RPM Fusion repository (provides Jellyfin)
+sudo dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+
 # Add the Qar repository
 sudo rpm --import https://devrupt-io.github.io/qar/rpm/KEY.gpg
 sudo tee /etc/yum.repos.d/qar.repo <<EOF

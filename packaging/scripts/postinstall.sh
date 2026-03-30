@@ -38,6 +38,14 @@ elif [ "$1" -ge 2 ] 2>/dev/null; then
   systemctl restart qar-qbittorrent.service 2>/dev/null || true
   systemctl restart qar-backend.service 2>/dev/null || true
   systemctl restart qar-frontend.service 2>/dev/null || true
+else
+  # Fresh install: start services automatically
+  echo "Starting Qar services..."
+  systemctl start qar-vpn.service 2>/dev/null || true
+  sleep 5
+  systemctl start qar-qbittorrent.service 2>/dev/null || true
+  systemctl start qar-backend.service 2>/dev/null || true
+  systemctl start qar-frontend.service 2>/dev/null || true
 fi
 
 echo ""
