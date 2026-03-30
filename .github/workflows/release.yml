@@ -45,14 +45,14 @@ jobs:
             dist/packages/*.rpm
           generate_release_notes: true
 
-  publish-ppa:
+  publish-repos:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download .deb artifact
+      - name: Download package artifacts
         uses: actions/download-artifact@v4
         with:
           name: packages
@@ -63,6 +63,9 @@ jobs:
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: echo "$GPG_PRIVATE_KEY" | gpg --import
+
+      - name: Install createrepo
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq createrepo-c
 
       - name: Checkout gh-pages
         uses: actions/checkout@v4
@@ -93,20 +96,50 @@ jobs:
           cp -r packaging/ppa/dists gh-pages/
           if [ -f packaging/ppa/KEY.gpg ]; then cp packaging/ppa/KEY.gpg gh-pages/; fi
 
+      - name: Generate RPM repository
+        run: |
+          RPM_FILE=$(ls dist/packages/*.rpm | head -1)
+          
+          # Copy existing rpm packages if they exist
+          if [ -d gh-pages/rpm/packages ]; then
+            mkdir -p packaging/rpm-repo/packages
+            cp gh-pages/rpm/packages/*.rpm packaging/rpm-repo/packages/ 2>/dev/null || true
+          fi
+          
+          ./packaging/rpm-repo/publish.sh "$RPM_FILE"
+          
+          # Copy generated repo to gh-pages
+          mkdir -p gh-pages/rpm
+          cp -r packaging/rpm-repo/packages gh-pages/rpm/
+          if [ -f packaging/rpm-repo/KEY.gpg ]; then cp packaging/rpm-repo/KEY.gpg gh-pages/rpm/; fi
+
       - name: Create index.html
         run: |
           cat > gh-pages/index.html <<'HEREDOC'
           <!DOCTYPE html>
           <html>
-          <head><title>Qar APT Repository</title></head>
+          <head><title>Qar Package Repository</title></head>
           <body>
-          <h1>Qar APT Repository</h1>
-          <p>To install Qar on Debian/Ubuntu:</p>
+          <h1>Qar Package Repository</h1>
+          <h2>Debian / Ubuntu (APT)</h2>
           <pre>
           curl -fsSL https://devrupt-io.github.io/qar/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/qar.gpg
           echo "deb [signed-by=/usr/share/keyrings/qar.gpg] https://devrupt-io.github.io/qar stable main" | sudo tee /etc/apt/sources.list.d/qar.list
           sudo apt update
           sudo apt install qar
+          </pre>
+          <h2>Fedora / RHEL / CentOS (DNF)</h2>
+          <pre>
+          sudo rpm --import https://devrupt-io.github.io/qar/rpm/KEY.gpg
+          sudo tee /etc/yum.repos.d/qar.repo &lt;&lt;EOF
+          [qar]
+          name=Qar - Self-hosted media management
+          baseurl=https://devrupt-io.github.io/qar/rpm/packages
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://devrupt-io.github.io/qar/rpm/KEY.gpg
+          EOF
+          sudo dnf install qar
           </pre>
           </body>
           </html>

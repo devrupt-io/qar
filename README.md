@@ -37,6 +37,24 @@ sudo apt-get install -f    # Resolve dependencies
 ### Install on RHEL / Fedora
 
 ```bash
+# Add the Qar repository
+sudo rpm --import https://devrupt-io.github.io/qar/rpm/KEY.gpg
+sudo tee /etc/yum.repos.d/qar.repo <<EOF
+[qar]
+name=Qar - Self-hosted media management
+baseurl=https://devrupt-io.github.io/qar/rpm/packages
+enabled=1
+gpgcheck=1
+gpgkey=https://devrupt-io.github.io/qar/rpm/KEY.gpg
+EOF
+
+# Install
+sudo dnf install qar
+```
+
+Or install directly from an `.rpm` file:
+
+```bash
 sudo rpm -i qar-1.0.1.x86_64.rpm
 ```
 
