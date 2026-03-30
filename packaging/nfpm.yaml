@@ -27,7 +27,6 @@ overrides:
     depends:
       - nodejs >= 18.0.0
       - tor
-      - ffmpeg-free
       - wireguard-tools
       - iproute
       - socat
