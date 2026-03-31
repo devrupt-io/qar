@@ -11,6 +11,8 @@ homepage: "https://github.com/devrupt-io/qar"
 license: "MIT"
 
 # Package dependencies
+# Note: Jellyfin is NOT listed here — it's installed separately by install.sh
+# (Debian: from Jellyfin's APT repo; EL9: portable tarball via install-jellyfin.sh)
 depends:
   - nodejs (>= 18.0.0)
   - tor
@@ -18,7 +20,6 @@ depends:
   - wireguard-tools
   - iproute2
   - socat
-  - jellyfin
   - qbittorrent-nox
 
 # Override for RPM-specific dependency names
@@ -27,12 +28,12 @@ overrides:
     depends:
       - nodejs >= 18.0.0
       - tor
+      - ffmpeg
       - wireguard-tools
       - iproute
       - socat
       - qbittorrent-nox
-    recommends:
-      - jellyfin
+      - fontconfig
 
 # RPM-specific settings (posttrans runs after old package cleanup during upgrades)
 rpm:
@@ -80,6 +81,12 @@ contents:
   # Version file
   - src: VERSION
     dst: /opt/qar/VERSION
+
+  # Jellyfin portable installer (for RPM systems where package is unavailable)
+  - src: packaging/install-jellyfin.sh
+    dst: /opt/qar/install-jellyfin.sh
+    file_info:
+      mode: 0755
 
   # VPN / qBittorrent config helpers (from config/ dir)
   - src: config/pia-ca.rsa.4096.crt
