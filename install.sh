@@ -120,17 +120,25 @@ install_deb() {
     log "Qar repository already configured"
   fi
 
-  # Install
+  # Install Qar (pulls in all deps except Jellyfin)
   log "Updating package lists..."
   apt-get update -qq
 
   log "Installing Qar and dependencies..."
   DEBIAN_FRONTEND=noninteractive apt-get install -y qar
+
+  # Install Jellyfin from its official repo (added above)
+  if ! dpkg -l jellyfin-server 2>/dev/null | grep -q '^ii'; then
+    log "Installing Jellyfin..."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y jellyfin
+  else
+    log "Jellyfin already installed"
+  fi
 }
 
 # --- Fedora ---
 install_rpm_fedora() {
-  # Add RPM Fusion (provides Jellyfin)
+  # Add RPM Fusion (needed for ffmpeg)
   if ! rpm -q rpmfusion-free-release &>/dev/null; then
     log "Adding RPM Fusion repository..."
     dnf install -y "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm"
@@ -141,9 +149,12 @@ install_rpm_fedora() {
   # Add Qar repository
   setup_qar_rpm_repo
 
-  # Install
+  # Install Qar
   log "Installing Qar and dependencies..."
   dnf install -y qar
+
+  # Install Jellyfin via portable tarball (consistent across RPM distros)
+  install_jellyfin_portable
 }
 
 # --- RHEL / Rocky / AlmaLinux (EL9+) ---
@@ -168,7 +179,7 @@ install_rpm_el() {
   log "Enabling CRB repository..."
   /usr/bin/crb enable 2>/dev/null || dnf config-manager --set-enabled crb 2>/dev/null || true
 
-  # RPM Fusion
+  # RPM Fusion (needed for ffmpeg)
   if ! rpm -q rpmfusion-free-release &>/dev/null; then
     log "Adding RPM Fusion repository..."
     dnf install -y --nogpgcheck "https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-${el_version}.noarch.rpm"
@@ -179,15 +190,13 @@ install_rpm_el() {
   # Add Qar repository
   setup_qar_rpm_repo
 
-  # Install
+  # Install Qar
   log "Installing Qar and dependencies..."
   dnf install -y qar
 
-  # Note about Jellyfin on EL9
-  echo ""
-  warn "Note: Jellyfin may not be installable from RPM Fusion on EL${el_version}"
-  warn "due to ffmpeg version requirements. To install Jellyfin, see:"
-  warn "  https://jellyfin.org/docs/general/installation/linux"
+  # Install Jellyfin via portable tarball (RPM Fusion jellyfin package
+  # requires ffmpeg >= 7.1 which is not available on EL9)
+  install_jellyfin_portable
 }
 
 # Add Qar DNF/YUM repository
@@ -207,6 +216,23 @@ enabled=1
 gpgcheck=1
 gpgkey=https://devrupt-io.github.io/qar/rpm/KEY.gpg
 EOF
+}
+
+# Install Jellyfin from portable tarball (for RPM systems)
+install_jellyfin_portable() {
+  # Skip if Jellyfin is already installed
+  if systemctl is-active jellyfin &>/dev/null; then
+    log "Jellyfin is already running"
+    return
+  fi
+
+  if [ -f /opt/qar/install-jellyfin.sh ]; then
+    log "Installing Jellyfin via portable installer..."
+    bash /opt/qar/install-jellyfin.sh
+  else
+    warn "Jellyfin installer not found at /opt/qar/install-jellyfin.sh"
+    warn "Install Jellyfin manually: https://jellyfin.org/downloads/"
+  fi
 }
 
 # Detect and install
